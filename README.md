@@ -1,81 +1,163 @@
-# OCR - AI Based PDF/Excel Scanner Pipeline
+# NissiGrid - Document Intelligence & Extraction Platform
 
-A robust pipeline for ingesting, classifying, and extracting data from PDFs and Excel files.
+An enterprise-grade, automated document intelligence and financial data extraction platform for processing complex tax invoices, quotations, medical account statements, purchase orders, and Excel sheets.
 
-## System Dependencies
+---
 
-**macOS (brew):**
+## 📋 System Prerequisites
+
+### 1. OS-Level Dependencies
+
+**macOS (via Homebrew):**
 ```bash
-brew install tesseract poppler
+brew install tesseract poppler postgresql node
 ```
 
-**Ubuntu (apt):**
+**Ubuntu / Debian (via APT):**
 ```bash
 sudo apt update
-sudo apt install tesseract-ocr poppler-utils
+sudo apt install -y tesseract-ocr libtesseract-dev poppler-utils postgresql nodejs npm
 ```
 
-## Python Setup
+**Windows:**
+- Install [Tesseract OCR for Windows](https://github.com/UB-Mannheim/tesseract/wiki) and add to PATH.
+- Install [Poppler for Windows](https://github.com/oschwartz10612/poppler-windows/releases/) and add `bin` to PATH.
+- Install [PostgreSQL](https://www.postgresql.org/download/windows/) and [Node.js](https://nodejs.org/).
+
+---
+
+## ⚙️ Installation & Setup
+
+### Step 1: Clone Repository
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
+git clone https://github.com/vcn2809-eng/OCR.git
+cd OCR
+```
+
+### Step 2: Python Environment
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate    # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## Environment Variables
+### Step 3: Node.js Dependencies
 
-- `OPENAI_API_KEY`: Optional, for LLM fallback.
-- `DEBUG_MODE`: Set to `true` or `false` to enable debugging features.
-
-## Running the Application
+Install dependencies for both frontend and backend services:
 
 ```bash
-uvicorn app.api.main:app --reload
+# Express API Backend
+cd server
+npm install
+cd ..
+
+# React Frontend
+cd frontend
+npm install
+cd ..
 ```
 
-## Testing
+### Step 4: Database Setup
+
+Ensure PostgreSQL is running, then create the database and load schema:
 
 ```bash
+# Create database 'scanner'
+createdb scanner
+
+# Run schema initialization
+psql -d scanner -f app/persistence/schema.sql
+```
+
+*(Optional)* Copy `.env.example` to `.env` if you need custom PostgreSQL credentials:
+```bash
+cp .env.example .env
+```
+
+---
+
+## 🚀 Running the Application
+
+### Option A: One-Click Launcher (macOS / Linux)
+
+```bash
+chmod +x start_app.sh
+./start_app.sh
+```
+
+### Option B: Run Services Manually
+
+1. **Start Express API Server (Port 5001):**
+   ```bash
+   cd server
+   node server.js
+   ```
+
+2. **Start React Frontend (Port 5173):**
+   ```bash
+   cd frontend
+   npm run dev
+   ```
+
+3. Open **`http://localhost:5173`** in your browser.
+
+---
+
+## 🧪 Running Tests
+
+Run the test suite (188 tests):
+
+```bash
+source .venv/bin/activate
 pytest tests/
 ```
 
-## Pipeline Overview
+Verify frontend build:
+```bash
+cd frontend && npm run build
+```
 
-1. **Ingestion**: Handles file uploads and storage.
-2. **Classification**: Classifies the document type (e.g., invoice, resume).
-3. **Preprocessing**: Cleans and prepares documents for OCR.
-4. **OCR**: Extracts text from images or PDFs.
-5. **Excel Extraction**: Extracts data directly from Excel files.
-6. **Table Detection**: Identifies and extracts tabular data.
-7. **Normalization**: Standardizes extracted data formats.
-8. **Schema Mapping**: Maps normalized data to expected schemas.
-9. **Validation**: Validates data against predefined rules.
-10. **Persistence**: Saves data to the database.
-11. **Orchestrator**: Coordinates the entire pipeline process.
-12. **API**: Exposes endpoints for client interaction.
+---
 
-## Directory Structure
+## 🏗️ Architecture & Pipeline Overview
+
+- **Ingestion**: Multi-engine parsing of unstructured PDFs (native & OCR fallback) and Excel files (`.xlsx`, `.xls`, `.csv`).
+- **3-Layer Duplicate Protection**: Cryptographic SHA-256 hash check, header metadata comparison, and fuzzy line-item similarity matching.
+- **Mathematical Verification**: Pinpoint calculation discrepancy detection (`qty * rate = gross`, `subtotal + tax = final`).
+- **Entity Management**: Automatic vendor and customer registered address parsing.
+- **Executive Analytics**: Interactive SVG Donut chart and live document search.
+
+---
+
+## 📁 Directory Structure
 
 ```text
 nissigrid/
-├── app/
-│   ├── api/
-│   ├── classification/
-│   ├── config/
-│   ├── db/
-│   ├── excel_extraction/
-│   ├── ingestion/
-│   ├── normalization/
-│   ├── ocr/
-│   ├── orchestrator/
-│   ├── persistence/
-│   ├── preprocessing/
-│   ├── schema_mapping/
-│   ├── table_detection/
-│   └── validation/
-├── input_files/
-├── tests/
-├── README.md
-└── requirements.txt
+├── app/                              # Python Extraction & Processing Core
+│   ├── api/                          # FastAPI endpoints & routers
+│   ├── classification/               # Document type classification
+│   ├── config/                       # Settings & classification YAML rules
+│   ├── db/                           # SQLite / test database helpers
+│   ├── excel_extraction/             # Excel parsing logic
+│   ├── ingestion/                    # Ingestion handlers
+│   ├── normalization/                # Number, date, currency standardizers
+│   ├── ocr/                          # Tesseract OCR & image conversion
+│   ├── orchestrator/                 # End-to-end extraction pipeline
+│   ├── persistence/                  # PostgreSQL schema, models & DB session
+│   ├── preprocessing/                # Image binarization, deskewing
+│   ├── quotation_extraction/         # Hybrid PDF/Excel extraction & loader
+│   ├── schema_mapping/               # Schema field transformers
+│   ├── table_detection/              # Table boundary detection
+│   └── validation/                   # Data validation models & rules
+├── frontend/                         # React 18 + Vite SPA Single Page Application
+├── server/                           # Express.js REST API Server (Port 5001)
+├── tests/                            # Unit & integration test suite (188 tests)
+├── input_files/                      # Sample documents for testing & ingestion
+├── start_app.sh                      # One-click system launcher script
+├── .env.example                      # Configuration template
+├── HANDOVER_DOCUMENTATION.md         # Comprehensive Architectural Master Document
+├── requirements.txt                  # Python dependencies
+└── README.md                         # Project documentation
 ```
