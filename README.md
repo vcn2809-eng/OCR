@@ -1,4 +1,4 @@
-# PDF/Excel Scanner Pipeline
+# OCR - AI Based PDF/Excel Scanner Pipeline
 
 A robust pipeline for ingesting, classifying, and extracting data from PDFs and Excel files.
 
