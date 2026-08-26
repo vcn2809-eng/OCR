@@ -1,0 +1,68 @@
+invoice:
+  "invoice #": invoice_number
+  "invoice no": invoice_number
+  "invoice number": invoice_number
+  "inv no": invoice_number
+  "inv #": invoice_number
+  "bill to": customer_name
+  "billed to": customer_name
+  "customer": customer_name
+  "client": customer_name
+  "total due": total_amount
+  "amount due": total_amount
+  "total amount": total_amount
+  "grand total": total_amount
+  "total": total_amount
+  "invoice date": invoice_date
+  "date": invoice_date
+  "due date": due_date
+  "payment due": due_date
+  "subtotal": subtotal
+  "sub total": subtotal
+  "tax": tax_amount
+  "vat": tax_amount
+  "gst": tax_amount
+  "discount": discount_amount
+  "vendor": vendor_name
+  "from": vendor_name
+  "seller": vendor_name
+  "payment terms": payment_terms
+  "terms": payment_terms
+  "po number": purchase_order_number
+  "po #": purchase_order_number
+  "notes": notes
+  "remarks": notes
+
+resume:
+  "full name": name
+  "name": name
+  "email": email
+  "email address": email
+  "phone": phone
+  "phone number": phone
+  "mobile": phone
+  "address": address
+  "location": address
+  "objective": objective
+  "summary": objective
+  "professional summary": objective
+  "skills": skills
+  "technical skills": skills
+  "education": education
+  "work experience": work_experience
+  "employment history": work_experience
+  "experience": work_experience
+  "certifications": certifications
+  "achievements": achievements
+  "linkedin": linkedin_url
+  "github": github_url
+
+financial_statement:
+  "total assets": total_assets
+  "total liabilities": total_liabilities
+  "net income": net_income
+  "revenue": revenue
+  "gross profit": gross_profit
+  "operating expenses": operating_expenses
+  "period": period
+  "fiscal year": fiscal_year

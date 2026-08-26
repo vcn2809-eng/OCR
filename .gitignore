@@ -1,0 +1,48 @@
+# Dependencies & Virtual Environments
+.venv/
+venv/
+ENV/
+node_modules/
+frontend/node_modules/
+server/node_modules/
+
+# Python Build & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.eggs/
+
+# Frontend Production Builds
+frontend/dist/
+frontend/build/
+.vite/
+
+# Database & Environment Configuration
+*.log
+*.sqlite
+*.sqlite3
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# OS & IDE Junk
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.idea/
+.vscode/
+
+# Temp Uploads / Processing Debug Artifacts
+/tmp/
+uploads/
+*.pdf.png

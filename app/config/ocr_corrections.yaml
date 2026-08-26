@@ -1,0 +1,8 @@
+corrections:
+  "|": "I"
+
+patterns:
+  "lnvoice": "Invoice"
+  "|nvoice": "Invoice"
+  "Tot a l": "Total"
+  "Sub t otal": "Subtotal"

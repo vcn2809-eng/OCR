@@ -1,0 +1,64 @@
+invoice:
+  keywords:
+    - invoice
+    - inv no
+    - invoice number
+    - "invoice #"
+    - quotation
+    - quote
+    - quotaon
+    - bill to
+    - total due
+    - amount due
+    - payment terms
+    - due date
+    - subtotal
+    - gross amt
+    - taxable amount
+    - final value
+    - gst no
+  threshold: 0.2
+
+resume:
+  keywords:
+    - curriculum vitae
+    - cv
+    - objective
+    - work experience
+    - employment history
+    - education
+    - skills
+    - references
+    - achievements
+    - professional summary
+  threshold: 0.3
+
+financial_statement:
+  keywords:
+    - balance sheet
+    - income statement
+    - cash flow
+    - net income
+    - total assets
+    - total liabilities
+    - shareholders equity
+    - profit and loss
+    - operating expenses
+  threshold: 0.3
+
+purchase_order:
+  keywords:
+    - purchase order
+    - po number
+    - "po #"
+    - order date
+    - ship to
+    - vendor
+    - item description
+    - unit price
+    - quantity
+  threshold: 0.3
+
+generic:
+  keywords: []
+  threshold: 0.0
