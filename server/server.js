@@ -1057,7 +1057,20 @@ app.get('/api/ghost-suggest', async (req, res) => {
   }
 });
 
+// Serve Compiled React Frontend (Production & Docker Mode)
+const frontendDistPath = path.join(__dirname, '../frontend/dist');
+if (fs.existsSync(frontendDistPath)) {
+  app.use(express.static(frontendDistPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/files')) {
+      return next();
+    }
+    res.sendFile(path.join(frontendDistPath, 'index.html'));
+  });
+}
+
 // Start Server
 app.listen(PORT, () => {
   console.log(`Express API server running on port ${PORT}`);
 });
+

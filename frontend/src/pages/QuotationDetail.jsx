@@ -245,7 +245,8 @@ export default function QuotationDetail() {
   }
 
   const fileFormat = getFileFormat(quotation.source_file)
-  const sourceFileUrl = `http://localhost:5001/files/${quotation.source_file}`
+  const sourceFileUrl = `/files/${quotation.source_file}`
+
 
   return (
     <div>

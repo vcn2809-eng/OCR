@@ -1,6 +1,7 @@
 import quotationApi from './quotationClient.js'
 
-const EXPRESS_BASE = 'http://localhost:5001/api'
+const EXPRESS_BASE = '/api'
+
 
 // Export API implementation pointing to Express server on Port 5001
 export const api = {

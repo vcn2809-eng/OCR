@@ -1,4 +1,5 @@
-const EXPRESS_API_BASE = 'http://localhost:5001/api'
+const EXPRESS_API_BASE = '/api'
+
 
 async function request(endpoint, options = {}) {
   const url = `${EXPRESS_API_BASE}${endpoint}`

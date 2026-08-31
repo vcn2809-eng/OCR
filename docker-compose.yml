@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14-alpine
+    container_name: nissigrid_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: scanner
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./app/persistence/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d scanner"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nissigrid_app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/scanner
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: scanner
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      PORT: 5001
+      AI_EXTRACTION_ENABLED: "false"
+      OCR_CONFIDENCE_THRESHOLD: "0.6"
+    ports:
+      - "5001:5001"
+    volumes:
+      - input_files_data:/app/input_files
+      - db_storage_data:/app/app/db
+
+volumes:
+  pgdata:
+    driver: local
+  input_files_data:
+    driver: local
+  db_storage_data:
+    driver: local
