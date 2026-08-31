@@ -1070,7 +1070,8 @@ if (fs.existsSync(frontendDistPath)) {
 }
 
 // Start Server
-app.listen(PORT, () => {
-  console.log(`Express API server running on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Express API server running on http://0.0.0.0:${PORT}`);
 });
+
 
