@@ -20,6 +20,8 @@ export default function UploadPage() {
     batchCompleted,
     batchStats,
     lastExtractedDoc,
+    rateLimitEnabled,
+    toggleRateLimit,
     addFilesToQueue,
     removeFileFromQueue,
     clearQueue,
@@ -222,9 +224,30 @@ PATIENT AMOUNT DUE: $199.00`)
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                 Supports all file types: PDF, Excel (XLSX/XLS/CSV), and Images (JPG/PNG/BMP/TIFF)
               </div>
-              <div style={{ fontSize: 11, color: 'var(--cyan)', marginTop: 8, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                <span className="badge-dot" style={{ background: 'var(--cyan)' }} />
-                Batch Rate Limit Enforced: Upload up to 15 files per batch session
+              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  onClick={toggleRateLimit}
+                  className="btn btn-sm"
+                  style={{
+                    borderRadius: 20,
+                    padding: '4px 14px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    cursor: 'pointer',
+                    background: rateLimitEnabled ? 'rgba(0, 212, 255, 0.12)' : 'rgba(234, 179, 8, 0.12)',
+                    color: rateLimitEnabled ? 'var(--cyan)' : 'var(--yellow)',
+                    border: `1px solid ${rateLimitEnabled ? 'rgba(0, 212, 255, 0.4)' : 'rgba(234, 179, 8, 0.4)'}`,
+                    transition: 'all 0.2s'
+                  }}
+                  title="Click to turn Batch Rate Limit ON or OFF"
+                >
+                  <span className="badge-dot" style={{ background: rateLimitEnabled ? 'var(--cyan)' : 'var(--yellow)' }} />
+                  {rateLimitEnabled ? '⚡ Batch Rate Limit: ON (Max 15 files)' : '🔓 Batch Rate Limit: OFF (Unlimited files)'}
+                </button>
               </div>
               <input
                 id="batch-file-input"
@@ -241,7 +264,7 @@ PATIENT AMOUNT DUE: $199.00`)
           {/* Live Ingestion Queue Card */}
           {filesQueue.length > 0 && (
             <div className="card" style={{ padding: 24, marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, borderBottom: '1px solid var(--border)', paddingBottom: 12, flexWrap: 'wrap', gap: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <Layers size={18} style={{ color: 'var(--cyan)' }} />
                   <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
@@ -249,7 +272,26 @@ PATIENT AMOUNT DUE: $199.00`)
                   </h3>
                 </div>
                 {!ingesting && (
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={toggleRateLimit}
+                      className="btn btn-sm"
+                      style={{
+                        borderRadius: 20,
+                        padding: '3px 10px',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        background: rateLimitEnabled ? 'rgba(0, 212, 255, 0.1)' : 'rgba(234, 179, 8, 0.1)',
+                        color: rateLimitEnabled ? 'var(--cyan)' : 'var(--yellow)',
+                        border: `1px solid ${rateLimitEnabled ? 'rgba(0, 212, 255, 0.3)' : 'rgba(234, 179, 8, 0.3)'}`
+                      }}
+                    >
+                      {rateLimitEnabled ? '⚡ Limit: ON (15)' : '🔓 Limit: OFF'}
+                    </button>
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm"
@@ -412,7 +454,7 @@ PATIENT AMOUNT DUE: $199.00`)
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20, background: 'rgba(255,255,255,0.02)', padding: 14, borderRadius: 8, border: '1px solid var(--border)' }}>
                 <div>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block' }}>Vendor / Provider</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block' }}>Vendor</span>
                   <strong style={{ fontSize: 13, color: '#fff' }}>{lastExtractedDoc.vendor_name || lastExtractedDoc.name || 'N/A'}</strong>
                 </div>
                 <div>
@@ -478,7 +520,7 @@ PATIENT AMOUNT DUE: $199.00`)
                         <tr>
                           <th>Doc ID</th>
                           <th>Invoice No</th>
-                          <th>Vendor / Provider</th>
+                          <th>Vendor</th>
                           <th>Customer / Patient</th>
                           <th>Status</th>
                           <th className="text-right">Action</th>
@@ -654,7 +696,7 @@ PATIENT AMOUNT DUE: $199.00`)
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20, background: 'rgba(255,255,255,0.02)', padding: 14, borderRadius: 8, border: '1px solid var(--border)' }}>
                 <div>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block' }}>Vendor / Provider</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block' }}>Vendor</span>
                   <strong style={{ fontSize: 13, color: '#fff' }}>{textExtractedDoc.vendor_name || textExtractedDoc.name || 'N/A'}</strong>
                 </div>
                 <div>

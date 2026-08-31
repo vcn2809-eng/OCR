@@ -33,16 +33,27 @@ export default function GhostSearchInput({
           signal: abortControllerRef.current.signal
         })
 
-        if (res && res.suggestion) {
-          const sug = res.suggestion
-          setSuggestion(sug)
-
-          // Check if ghost completion is a direct prefix continuation
-          if (sug.toLowerCase().startsWith(value.toLowerCase())) {
-            setGhostSuffix(sug.slice(value.length) + ' (Tab ↹)')
+        if (res && res.suggestion && res.suggestion.trim()) {
+          const sug = res.suggestion.trim()
+          
+          // Only show ghost completion if the suggestion is NOT identical to what user typed
+          if (sug.toLowerCase() !== value.trim().toLowerCase()) {
+            if (sug.toLowerCase().startsWith(value.toLowerCase())) {
+              const remaining = sug.slice(value.length)
+              if (remaining) {
+                setSuggestion(sug)
+                setGhostSuffix(`${remaining} (Tab ↹)`)
+              } else {
+                setSuggestion(null)
+                setGhostSuffix('')
+              }
+            } else {
+              setSuggestion(sug)
+              setGhostSuffix(` → ${sug} (Tab ↹)`)
+            }
           } else {
-            // Case replacement or column completion (e.g. srl -> SRL)
-            setGhostSuffix(` → ${sug} (Tab ↹)`)
+            setSuggestion(null)
+            setGhostSuffix('')
           }
         } else {
           setSuggestion(null)
@@ -65,7 +76,7 @@ export default function GhostSearchInput({
   }, [value])
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Tab' && suggestion) {
+    if ((e.key === 'Tab' || e.key === 'ArrowRight') && suggestion) {
       e.preventDefault()
       onChange(suggestion)
       setSuggestion(null)
@@ -100,6 +111,13 @@ export default function GhostSearchInput({
       {/* Inline Ghost-Text Prediction Overlay */}
       {ghostSuffix && (
         <div
+          onClick={() => {
+            if (suggestion) {
+              onChange(suggestion)
+              setSuggestion(null)
+              setGhostSuffix('')
+            }
+          }}
           style={{
             position: 'absolute',
             left: 32,
@@ -107,8 +125,9 @@ export default function GhostSearchInput({
             bottom: 0,
             display: 'flex',
             alignItems: 'center',
-            pointerEvents: 'none',
-            zIndex: 1,
+            pointerEvents: 'auto',
+            cursor: 'pointer',
+            zIndex: 3,
             fontSize: 13,
             fontFamily: 'inherit',
             whiteSpace: 'pre',
@@ -117,7 +136,7 @@ export default function GhostSearchInput({
           }}
         >
           <span style={{ visibility: 'hidden' }}>{value}</span>
-          <span style={{ color: 'var(--cyan)', opacity: 0.65, fontWeight: 500 }}>
+          <span style={{ color: 'var(--cyan)', opacity: 0.85, fontWeight: 600 }}>
             {ghostSuffix}
           </span>
         </div>

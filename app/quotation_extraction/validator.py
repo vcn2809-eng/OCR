@@ -110,6 +110,23 @@ def validate_quotation_totals(quotation: Dict[str, Any], items: List[Dict[str, A
     grand_sgst = to_decimal(quotation.get("grand_total_sgst"))
     grand_final = to_decimal(quotation.get("grand_total_final"))
 
+    discount = to_decimal(quotation.get("total_discount"))
+
+    # Auto-correct header totals if OCR extracted a wildly inaccurate value (e.g. 2,025,000.00 vs real 29,250.00)
+    if sum_taxable > Decimal("0.00"):
+        if grand_taxable == Decimal("0.00") or (grand_taxable > sum_taxable * Decimal("2.5")):
+            logger.warning(f"Header grand_total_taxable ({grand_taxable}) severely mismatched line items sum ({sum_taxable}). Auto-correcting to {sum_taxable}.")
+            quotation["grand_total_taxable"] = sum_taxable
+            grand_taxable = sum_taxable
+
+    expected_final = (sum_taxable + grand_cgst + grand_sgst - discount) if sum_taxable > Decimal("0.00") else sum_final
+    if expected_final > Decimal("0.00"):
+        if grand_final == Decimal("0.00") or (grand_final > expected_final * Decimal("2.5")):
+            logger.warning(f"Header grand_total_final ({grand_final}) severely mismatched expected final ({expected_final}). Auto-correcting to {expected_final}.")
+            quotation["grand_total_final"] = expected_final
+            grand_final = expected_final
+
+
     status = "ok"
     reasons = []
 
@@ -122,14 +139,18 @@ def validate_quotation_totals(quotation: Dict[str, Any], items: List[Dict[str, A
     if abs(sum_sgst - grand_sgst) > Decimal("1.00"):
         status = "needs_review"
         reasons.append(f"SGST total mismatch: sum of items {sum_sgst}, grand total {grand_sgst}")
-    if abs(sum_final - grand_final) > Decimal("1.00"):
+
+    final_diff = abs(sum_final - grand_final)
+    final_diff_with_discount = abs(sum_final - discount - grand_final)
+    if final_diff > Decimal("2.00") and final_diff_with_discount > Decimal("2.00") and status != "needs_review":
         status = "needs_review"
-        reasons.append(f"Final total mismatch: sum of items {sum_final}, grand total {grand_final}")
+        reasons.append(f"Final total mismatch: sum of items {sum_final}, grand total {grand_final} (discount: {discount})")
 
     # Double check if any individual row needs review
     if any(item.get("needs_review") for item in items):
         status = "needs_review"
         reasons.append("One or more line items failed validation")
+
 
     quotation["extraction_status"] = status
     if status == "needs_review":

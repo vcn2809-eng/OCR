@@ -79,6 +79,13 @@ def init_db() -> None:
     """
     engine = get_engine()
     Base.metadata.create_all(engine, checkfirst=True)
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE billing_documents ADD COLUMN IF NOT EXISTS total_discount NUMERIC(14, 2);"))
+            conn.execute(text("ALTER TABLE quotations ADD COLUMN IF NOT EXISTS total_discount NUMERIC(14, 2);"))
+    except Exception as e:
+        logger.warning(f"Could not apply column migration for total_discount: {e}")
     logger.info("Database tables initialised.")
     migrate_legacy_data()
 

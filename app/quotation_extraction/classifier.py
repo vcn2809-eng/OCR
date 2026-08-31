@@ -31,16 +31,16 @@ def classify_document_text(text: str) -> Tuple[str, Decimal, str]:
     if "purchase order" in normalized or "po no" in normalized or "po number" in normalized or "lpo no" in normalized:
         return 'purchase_order', Decimal('1.000'), 'Found "Purchase Order" heading'
 
-    # Tax Invoice
-    if "tax invoice" in normalized or "retail invoice" in normalized or "bill of supply" in normalized or "commercial invoice" in normalized:
-        return 'invoice_final', Decimal('1.000'), 'Found "Tax Invoice" heading'
+    # Tax Invoice / Retail Bill / Receipt / Utility / Restaurant
+    if any(k in normalized for k in ["tax invoice", "retail invoice", "bill of supply", "commercial invoice", "utility service bill", "restaurant bill", "money receipt", "diagnostic money receipt", "net payable", "total bill", "total amount due", "invoice"]):
+        return 'invoice_final', Decimal('1.000'), 'Found Invoice/Bill/Receipt header terms'
 
     # Quotation
     if "quotation" in normalized or "quote" in normalized or "validity" in normalized or "enq. ref" in normalized:
         return 'quotation', Decimal('0.950'), 'Found Quotation-specific header terms ("Quotation" / "Validity" / "Enq. Ref")'
 
     # Generic Invoice
-    if "invoice no" in normalized or "invoice date" in normalized or "bill no" in normalized or "tax id" in normalized:
+    if "invoice no" in normalized or "invoice date" in normalized or "bill no" in normalized or "tax id" in normalized or "sub total" in normalized:
         return 'invoice_final', Decimal('0.900'), 'Found invoice number and date fields'
 
     # If heuristics are ambiguous, fall back to LLM classifier

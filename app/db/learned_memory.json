@@ -1,0 +1,1226 @@
+{
+  "vendors": {
+    "MOTIJHEEL SUPERSHOP": {
+      "vendor_name": "Motijheel Supershop",
+      "document_type": "retail_invoice_mushak63",
+      "known_items": [
+        {
+          "description": "Soybean Oil 1L",
+          "typical_rate": 63.84,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Indian Spinach",
+          "typical_rate": 348.55,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Milk Powder",
+          "typical_rate": 92.31,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "New Alu Regular Loose",
+          "typical_rate": 138.65,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Miniket Rice 5kg",
+          "typical_rate": 138.9,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Red Amaranth PC",
+          "typical_rate": 76.84,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        }
+      ],
+      "known_hsn": {},
+      "known_uoms": []
+    },
+    "M/S. ION SOFT WATER INDIA PRIVATE LIMITED": {
+      "vendor_name": "M/s. ION SOFT WATER INDIA PRIVATE LIMITED",
+      "document_type": "tax_invoice_indian_gst",
+      "known_items": [
+        {
+          "description": "Anti Scalent High concentrate 100 ML to 100 Litres",
+          "typical_rate": 550.0,
+          "hsn_code": "3824",
+          "uom": "L",
+          "count": 1
+        },
+        {
+          "description": "20 \" Wound Filter slim",
+          "typical_rate": 650.0,
+          "hsn_code": "8421",
+          "uom": "Nos",
+          "count": 1
+        },
+        {
+          "description": "20 \" Sediment cartridge Filter slim",
+          "typical_rate": 700.0,
+          "hsn_code": "8421",
+          "uom": "Nos",
+          "count": 1
+        },
+        {
+          "description": "20 \" Wound Filter Jumbo",
+          "typical_rate": 800.0,
+          "hsn_code": "8421",
+          "uom": "Nos",
+          "count": 1
+        },
+        {
+          "description": "20 \" Sediment cartridge Filter Jumbo",
+          "typical_rate": 900.0,
+          "hsn_code": "8421",
+          "uom": "Nos",
+          "count": 1
+        }
+      ],
+      "known_hsn": {},
+      "known_uoms": []
+    },
+    "FAST NET BILLING": {
+      "vendor_name": "FAST NET BILLING",
+      "document_type": "utility_service_bill_pos",
+      "known_items": [
+        {
+          "description": "Router Rent",
+          "typical_rate": 1226.84,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Installation Charge",
+          "typical_rate": 1663.89,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Previous Due",
+          "typical_rate": 1405.48,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Late Fee",
+          "typical_rate": 1217.9,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        }
+      ],
+      "known_hsn": {},
+      "known_uoms": []
+    },
+    "LIFECARE DIAGNOSTIC": {
+      "vendor_name": "LIFECARE DIAGNOSTIC",
+      "document_type": "diagnostic_money_receipt",
+      "known_items": [
+        {
+          "description": "Ultrasonogram",
+          "typical_rate": 2181.08,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Blood Sugar",
+          "typical_rate": 1624.49,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "S. Creatinine",
+          "typical_rate": 2102.62,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Consultation Fee",
+          "typical_rate": 2056.42,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Dengue NS1",
+          "typical_rate": 1084.51,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Urine R/E",
+          "typical_rate": 325.74,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        }
+      ],
+      "known_hsn": {},
+      "known_uoms": []
+    },
+    "BROADBAND POINT": {
+      "vendor_name": "BROADBAND POINT",
+      "document_type": "utility_service_bill_pos",
+      "known_items": [
+        {
+          "description": "Cable TV Bill",
+          "typical_rate": 674.97,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Current Month Charge",
+          "typical_rate": 463.35,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        }
+      ],
+      "known_hsn": {},
+      "known_uoms": []
+    },
+    "LOCAL VALUE MART": {
+      "vendor_name": "LOCAL VALUE MART",
+      "document_type": "retail_invoice_mushak63",
+      "known_items": [
+        {
+          "description": "Sugar 1kg",
+          "typical_rate": 169.71,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Indian Spinach",
+          "typical_rate": 332.41,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "New Alu Regular Loose",
+          "typical_rate": 161.84,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Farm Egg Brown Loose(Pcs",
+          "typical_rate": 232.26,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Tea Pack",
+          "typical_rate": 248.7,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Mineral Water",
+          "typical_rate": 266.33,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        }
+      ],
+      "known_hsn": {},
+      "known_uoms": []
+    },
+    "DOCTORS CHOICE PHARMACY": {
+      "vendor_name": "DOCTORS CHOICE PHARMACY",
+      "document_type": "medicine_cash_memo",
+      "known_items": [
+        {
+          "description": "Bandage Roll",
+          "typical_rate": 2583.47,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Vitamin C Tablet",
+          "typical_rate": 1092.72,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        }
+      ],
+      "known_hsn": {},
+      "known_uoms": []
+    },
+    "HEALTHWAY PHARMACY": {
+      "vendor_name": "HEALTHWAY PHARMACY",
+      "document_type": "medicine_cash_memo",
+      "known_items": [
+        {
+          "description": "Hand Sanitizer",
+          "typical_rate": 2093.2,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Bandage Roll",
+          "typical_rate": 2636.88,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Calcium Tablet",
+          "typical_rate": 736.62,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        }
+      ],
+      "known_hsn": {},
+      "known_uoms": []
+    },
+    "BENGAL DAILY MART": {
+      "vendor_name": "BENGAL DAILY MART",
+      "document_type": "retail_invoice_mushak63",
+      "known_items": [
+        {
+          "description": "New Alu Regular Loose",
+          "typical_rate": 289.75,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Farm Egg Brown Loose(Pcs",
+          "typical_rate": 251.56,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Tea Pack",
+          "typical_rate": 212.75,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        },
+        {
+          "description": "Soybean Oil 1L",
+          "typical_rate": 178.11,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        }
+      ],
+      "known_hsn": {},
+      "known_uoms": []
+    },
+    "TRUST FACILITY MANAGEMENT 546": {
+      "vendor_name": "Trust Facility Management 546",
+      "document_type": "subscription_bill",
+      "known_items": [
+        {
+          "description": "Office instl. consultancy",
+          "typical_rate": 2923.0,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        }
+      ],
+      "known_hsn": {},
+      "known_uoms": []
+    },
+    "GREENLINE CONSULTANCY 264": {
+      "vendor_name": "Greenline Consultancy 264",
+      "document_type": "debit_note_service_bill",
+      "known_items": [
+        {
+          "description": "Networking support chrg supply and configuration",
+          "typical_rate": 2982.0,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        }
+      ],
+      "known_hsn": {},
+      "known_uoms": []
+    },
+    "TRUST FACILITY MANAGEMENT 640": {
+      "vendor_name": "Trust Facility Management 640",
+      "document_type": "work_completion_bill",
+      "known_items": [
+        {
+          "description": "AMC for office computers",
+          "typical_rate": 776.0,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        }
+      ],
+      "known_hsn": {},
+      "known_uoms": []
+    },
+    "ROYAL MAINTENANCE SERVICES 555": {
+      "vendor_name": "Royal Maintenance Services 555",
+      "document_type": "bill_of_services",
+      "known_items": [
+        {
+          "description": "Biometric attendance setup",
+          "typical_rate": 3181.0,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        }
+      ],
+      "known_hsn": {},
+      "known_uoms": []
+    },
+    "NEXTGEN SERVICES 714": {
+      "vendor_name": "NextGen Services 714",
+      "document_type": "procurement_support_bill",
+      "known_items": [
+        {
+          "description": "Recruitment consultancy service",
+          "typical_rate": 1721.0,
+          "hsn_code": "",
+          "uom": "",
+          "count": 1
+        }
+      ],
+      "known_hsn": {},
+      "known_uoms": []
+    },
+    "TEST ION WATER": {
+      "vendor_name": "TEST ION WATER",
+      "document_type": "tax_invoice",
+      "known_items": [
+        {
+          "description": "20 \" Wound Filter slim",
+          "typical_rate": 650.0,
+          "hsn_code": "8421",
+          "uom": "Nos",
+          "count": 13
+        }
+      ],
+      "known_hsn": {},
+      "known_uoms": []
+    }
+  },
+  "item_catalog": {
+    "soybean oil 1l": {
+      "canonical_description": "Soybean Oil 1L",
+      "typical_rate": 178.11,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "Motijheel Supershop",
+        "BENGAL DAILY MART"
+      ]
+    },
+    "indian spinach": {
+      "canonical_description": "Indian Spinach",
+      "typical_rate": 332.41,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "Motijheel Supershop",
+        "LOCAL VALUE MART"
+      ]
+    },
+    "milk powder": {
+      "canonical_description": "Milk Powder",
+      "typical_rate": 92.31,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "Motijheel Supershop"
+      ]
+    },
+    "new alu regular loose": {
+      "canonical_description": "New Alu Regular Loose",
+      "typical_rate": 289.75,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "Motijheel Supershop",
+        "LOCAL VALUE MART",
+        "BENGAL DAILY MART"
+      ]
+    },
+    "miniket rice 5kg": {
+      "canonical_description": "Miniket Rice 5kg",
+      "typical_rate": 138.9,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "Motijheel Supershop"
+      ]
+    },
+    "red amaranth pc": {
+      "canonical_description": "Red Amaranth PC",
+      "typical_rate": 76.84,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "Motijheel Supershop"
+      ]
+    },
+    "anti scalent high concentrate 100 ml to 100 litres": {
+      "canonical_description": "Anti Scalent High concentrate 100 ML to 100 Litres",
+      "typical_rate": 550.0,
+      "hsn_code": "3824",
+      "uom": "L",
+      "vendors": [
+        "M/s. ION SOFT WATER INDIA PRIVATE LIMITED"
+      ]
+    },
+    "20 \" wound filter slim": {
+      "canonical_description": "20 \" Wound Filter slim",
+      "typical_rate": 650.0,
+      "hsn_code": "8421",
+      "uom": "Nos",
+      "vendors": [
+        "M/s. ION SOFT WATER INDIA PRIVATE LIMITED",
+        "TEST ION WATER"
+      ]
+    },
+    "20 \" sediment cartridge filter slim": {
+      "canonical_description": "20 \" Sediment cartridge Filter slim",
+      "typical_rate": 700.0,
+      "hsn_code": "8421",
+      "uom": "Nos",
+      "vendors": [
+        "M/s. ION SOFT WATER INDIA PRIVATE LIMITED"
+      ]
+    },
+    "20 \" wound filter jumbo": {
+      "canonical_description": "20 \" Wound Filter Jumbo",
+      "typical_rate": 800.0,
+      "hsn_code": "8421",
+      "uom": "Nos",
+      "vendors": [
+        "M/s. ION SOFT WATER INDIA PRIVATE LIMITED"
+      ]
+    },
+    "20 \" sediment cartridge filter jumbo": {
+      "canonical_description": "20 \" Sediment cartridge Filter Jumbo",
+      "typical_rate": 900.0,
+      "hsn_code": "8421",
+      "uom": "Nos",
+      "vendors": [
+        "M/s. ION SOFT WATER INDIA PRIVATE LIMITED"
+      ]
+    },
+    "router rent": {
+      "canonical_description": "Router Rent",
+      "typical_rate": 1226.84,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "FAST NET BILLING"
+      ]
+    },
+    "installation charge": {
+      "canonical_description": "Installation Charge",
+      "typical_rate": 1663.89,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "FAST NET BILLING"
+      ]
+    },
+    "previous due": {
+      "canonical_description": "Previous Due",
+      "typical_rate": 1405.48,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "FAST NET BILLING"
+      ]
+    },
+    "late fee": {
+      "canonical_description": "Late Fee",
+      "typical_rate": 1217.9,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "FAST NET BILLING"
+      ]
+    },
+    "ultrasonogram": {
+      "canonical_description": "Ultrasonogram",
+      "typical_rate": 2181.08,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "LIFECARE DIAGNOSTIC"
+      ]
+    },
+    "blood sugar": {
+      "canonical_description": "Blood Sugar",
+      "typical_rate": 1624.49,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "LIFECARE DIAGNOSTIC"
+      ]
+    },
+    "s. creatinine": {
+      "canonical_description": "S. Creatinine",
+      "typical_rate": 2102.62,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "LIFECARE DIAGNOSTIC"
+      ]
+    },
+    "consultation fee": {
+      "canonical_description": "Consultation Fee",
+      "typical_rate": 2056.42,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "LIFECARE DIAGNOSTIC"
+      ]
+    },
+    "dengue ns1": {
+      "canonical_description": "Dengue NS1",
+      "typical_rate": 1084.51,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "LIFECARE DIAGNOSTIC"
+      ]
+    },
+    "urine r/e": {
+      "canonical_description": "Urine R/E",
+      "typical_rate": 325.74,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "LIFECARE DIAGNOSTIC"
+      ]
+    },
+    "cable tv bill": {
+      "canonical_description": "Cable TV Bill",
+      "typical_rate": 674.97,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "BROADBAND POINT"
+      ]
+    },
+    "current month charge": {
+      "canonical_description": "Current Month Charge",
+      "typical_rate": 463.35,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "BROADBAND POINT"
+      ]
+    },
+    "sugar 1kg": {
+      "canonical_description": "Sugar 1kg",
+      "typical_rate": 169.71,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "LOCAL VALUE MART"
+      ]
+    },
+    "farm egg brown loose(pcs": {
+      "canonical_description": "Farm Egg Brown Loose(Pcs",
+      "typical_rate": 251.56,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "LOCAL VALUE MART",
+        "BENGAL DAILY MART"
+      ]
+    },
+    "tea pack": {
+      "canonical_description": "Tea Pack",
+      "typical_rate": 212.75,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "LOCAL VALUE MART",
+        "BENGAL DAILY MART"
+      ]
+    },
+    "mineral water": {
+      "canonical_description": "Mineral Water",
+      "typical_rate": 266.33,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "LOCAL VALUE MART"
+      ]
+    },
+    "bandage roll": {
+      "canonical_description": "Bandage Roll",
+      "typical_rate": 2636.88,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "DOCTORS CHOICE PHARMACY",
+        "HEALTHWAY PHARMACY"
+      ]
+    },
+    "vitamin c tablet": {
+      "canonical_description": "Vitamin C Tablet",
+      "typical_rate": 1092.72,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "DOCTORS CHOICE PHARMACY"
+      ]
+    },
+    "hand sanitizer": {
+      "canonical_description": "Hand Sanitizer",
+      "typical_rate": 2093.2,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "HEALTHWAY PHARMACY"
+      ]
+    },
+    "calcium tablet": {
+      "canonical_description": "Calcium Tablet",
+      "typical_rate": 736.62,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "HEALTHWAY PHARMACY"
+      ]
+    },
+    "office instl. consultancy": {
+      "canonical_description": "Office instl. consultancy",
+      "typical_rate": 2923.0,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "Trust Facility Management 546"
+      ]
+    },
+    "networking support chrg supply and configuration": {
+      "canonical_description": "Networking support chrg supply and configuration",
+      "typical_rate": 2982.0,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "Greenline Consultancy 264"
+      ]
+    },
+    "amc for office computers": {
+      "canonical_description": "AMC for office computers",
+      "typical_rate": 776.0,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "Trust Facility Management 640"
+      ]
+    },
+    "biometric attendance setup": {
+      "canonical_description": "Biometric attendance setup",
+      "typical_rate": 3181.0,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "Royal Maintenance Services 555"
+      ]
+    },
+    "recruitment consultancy service": {
+      "canonical_description": "Recruitment consultancy service",
+      "typical_rate": 1721.0,
+      "hsn_code": "",
+      "uom": "",
+      "vendors": [
+        "NextGen Services 714"
+      ]
+    }
+  },
+  "ocr_corrections": {},
+  "learned_templates": [
+    {
+      "vendor_name": "Motijheel Supershop",
+      "document_type": "retail_invoice_mushak63",
+      "document_no": "CM-368066",
+      "sample_items": [
+        {
+          "description": "Soybean Oil 1L",
+          "qty": 6.0,
+          "rate": 63.84,
+          "amount": 383.04,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Indian Spinach",
+          "qty": 7.0,
+          "rate": 348.55,
+          "amount": 2439.85,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Milk Powder",
+          "qty": 2.0,
+          "rate": 92.31,
+          "amount": 184.62,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "New Alu Regular Loose",
+          "qty": 5.0,
+          "rate": 138.65,
+          "amount": 693.25,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Miniket Rice 5kg",
+          "qty": 8.0,
+          "rate": 138.9,
+          "amount": 1111.2,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Red Amaranth PC",
+          "qty": 4.0,
+          "rate": 76.84,
+          "amount": 307.36,
+          "hsn_code": "",
+          "uom": "Nos"
+        }
+      ]
+    },
+    {
+      "vendor_name": "M/s. ION SOFT WATER INDIA PRIVATE LIMITED",
+      "document_type": "tax_invoice_indian_gst",
+      "document_no": "060/26-27",
+      "sample_items": [
+        {
+          "description": "Anti Scalent High concentrate 100 ML to 100 Litres",
+          "qty": 10.0,
+          "rate": 550.0,
+          "amount": 5500.0,
+          "hsn_code": "3824",
+          "uom": "L"
+        },
+        {
+          "description": "20 \" Wound Filter slim",
+          "qty": 5.0,
+          "rate": 650.0,
+          "amount": 3250.0,
+          "hsn_code": "8421",
+          "uom": "Nos"
+        },
+        {
+          "description": "20 \" Sediment cartridge Filter slim",
+          "qty": 5.0,
+          "rate": 700.0,
+          "amount": 3500.0,
+          "hsn_code": "8421",
+          "uom": "Nos"
+        },
+        {
+          "description": "20 \" Wound Filter Jumbo",
+          "qty": 10.0,
+          "rate": 800.0,
+          "amount": 8000.0,
+          "hsn_code": "8421",
+          "uom": "Nos"
+        },
+        {
+          "description": "20 \" Sediment cartridge Filter Jumbo",
+          "qty": 10.0,
+          "rate": 900.0,
+          "amount": 9000.0,
+          "hsn_code": "8421",
+          "uom": "Nos"
+        }
+      ]
+    },
+    {
+      "vendor_name": "FAST NET BILLING",
+      "document_type": "utility_service_bill_pos",
+      "document_no": "POS-560991",
+      "sample_items": [
+        {
+          "description": "Router Rent",
+          "qty": 6.0,
+          "rate": 1226.84,
+          "amount": 7361.04,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Installation Charge",
+          "qty": 6.0,
+          "rate": 1663.89,
+          "amount": 9983.34,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Previous Due",
+          "qty": 4.0,
+          "rate": 1405.48,
+          "amount": 5621.92,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Late Fee",
+          "qty": 7.0,
+          "rate": 1217.9,
+          "amount": 8525.3,
+          "hsn_code": "",
+          "uom": "Nos"
+        }
+      ]
+    },
+    {
+      "vendor_name": "LIFECARE DIAGNOSTIC",
+      "document_type": "diagnostic_money_receipt",
+      "document_no": "BILL-371277",
+      "sample_items": [
+        {
+          "description": "Ultrasonogram",
+          "qty": 3.0,
+          "rate": 2181.08,
+          "amount": 6543.24,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Blood Sugar",
+          "qty": 4.0,
+          "rate": 1624.49,
+          "amount": 6497.96,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "S. Creatinine",
+          "qty": 7.0,
+          "rate": 2102.62,
+          "amount": 14718.34,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Consultation Fee",
+          "qty": 5.0,
+          "rate": 2056.42,
+          "amount": 10282.1,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Dengue NS1",
+          "qty": 1.0,
+          "rate": 1084.51,
+          "amount": 1084.51,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Urine R/E",
+          "qty": 3.0,
+          "rate": 325.74,
+          "amount": 977.22,
+          "hsn_code": "",
+          "uom": "Nos"
+        }
+      ]
+    },
+    {
+      "vendor_name": "BROADBAND POINT",
+      "document_type": "utility_service_bill_pos",
+      "document_no": "CM-257647",
+      "sample_items": [
+        {
+          "description": "Cable TV Bill",
+          "qty": 4.0,
+          "rate": 674.97,
+          "amount": 2699.88,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Current Month Charge",
+          "qty": 1.0,
+          "rate": 463.35,
+          "amount": 463.35,
+          "hsn_code": "",
+          "uom": "Nos"
+        }
+      ]
+    },
+    {
+      "vendor_name": "LOCAL VALUE MART",
+      "document_type": "retail_invoice_mushak63",
+      "document_no": "RI-756189",
+      "sample_items": [
+        {
+          "description": "Sugar 1kg",
+          "qty": 1.0,
+          "rate": 169.71,
+          "amount": 169.71,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Indian Spinach",
+          "qty": 4.0,
+          "rate": 332.41,
+          "amount": 1329.64,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "New Alu Regular Loose",
+          "qty": 2.0,
+          "rate": 161.84,
+          "amount": 323.68,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Farm Egg Brown Loose(Pcs",
+          "qty": 7.0,
+          "rate": 232.26,
+          "amount": 1625.82,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Tea Pack",
+          "qty": 6.0,
+          "rate": 248.7,
+          "amount": 1492.2,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Mineral Water",
+          "qty": 3.0,
+          "rate": 266.33,
+          "amount": 798.99,
+          "hsn_code": "",
+          "uom": "Nos"
+        }
+      ]
+    },
+    {
+      "vendor_name": "DOCTORS CHOICE PHARMACY",
+      "document_type": "medicine_cash_memo",
+      "document_no": "RI-356200",
+      "sample_items": [
+        {
+          "description": "Bandage Roll",
+          "qty": 7.0,
+          "rate": 2583.47,
+          "amount": 18084.29,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Vitamin C Tablet",
+          "qty": 7.0,
+          "rate": 1092.72,
+          "amount": 7649.04,
+          "hsn_code": "",
+          "uom": "Nos"
+        }
+      ]
+    },
+    {
+      "vendor_name": "HEALTHWAY PHARMACY",
+      "document_type": "medicine_cash_memo",
+      "document_no": "RI-931264",
+      "sample_items": [
+        {
+          "description": "Hand Sanitizer",
+          "qty": 8.0,
+          "rate": 2093.2,
+          "amount": 16745.6,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Bandage Roll",
+          "qty": 1.0,
+          "rate": 2636.88,
+          "amount": 2636.88,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Calcium Tablet",
+          "qty": 5.0,
+          "rate": 736.62,
+          "amount": 3683.1,
+          "hsn_code": "",
+          "uom": "Nos"
+        }
+      ]
+    },
+    {
+      "vendor_name": "BENGAL DAILY MART",
+      "document_type": "retail_invoice_mushak63",
+      "document_no": "POS-834253",
+      "sample_items": [
+        {
+          "description": "New Alu Regular Loose",
+          "qty": 3.0,
+          "rate": 289.75,
+          "amount": 869.25,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Farm Egg Brown Loose(Pcs",
+          "qty": 3.0,
+          "rate": 251.56,
+          "amount": 754.68,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Tea Pack",
+          "qty": 8.0,
+          "rate": 212.75,
+          "amount": 1702.0,
+          "hsn_code": "",
+          "uom": "Nos"
+        },
+        {
+          "description": "Soybean Oil 1L",
+          "qty": 2.0,
+          "rate": 178.11,
+          "amount": 356.22,
+          "hsn_code": "",
+          "uom": "Nos"
+        }
+      ]
+    },
+    {
+      "vendor_name": "Trust Facility Management 546",
+      "document_type": "subscription_bill",
+      "document_no": "INV-BD-2025-00247",
+      "sample_items": [
+        {
+          "description": "Office instl. consultancy",
+          "qty": 1.0,
+          "rate": 2923.0,
+          "amount": 2923.0,
+          "hsn_code": "",
+          "uom": "Nos"
+        }
+      ]
+    },
+    {
+      "vendor_name": "Greenline Consultancy 264",
+      "document_type": "debit_note_service_bill",
+      "document_no": "INV-BD-2025-00245",
+      "sample_items": [
+        {
+          "description": "Networking support chrg supply and configuration",
+          "qty": 6.0,
+          "rate": 2982.0,
+          "amount": 17892.0,
+          "hsn_code": "",
+          "uom": "Nos"
+        }
+      ]
+    },
+    {
+      "vendor_name": "Trust Facility Management 640",
+      "document_type": "work_completion_bill",
+      "document_no": "INV-BD-2025-00244",
+      "sample_items": [
+        {
+          "description": "AMC for office computers",
+          "qty": 5.0,
+          "rate": 776.0,
+          "amount": 3880.0,
+          "hsn_code": "",
+          "uom": "Nos"
+        }
+      ]
+    },
+    {
+      "vendor_name": "Royal Maintenance Services 555",
+      "document_type": "bill_of_services",
+      "document_no": "INV-BD-2025-00246",
+      "sample_items": [
+        {
+          "description": "Biometric attendance setup",
+          "qty": 9.0,
+          "rate": 3181.0,
+          "amount": 28629.0,
+          "hsn_code": "",
+          "uom": "Nos"
+        }
+      ]
+    },
+    {
+      "vendor_name": "NextGen Services 714",
+      "document_type": "procurement_support_bill",
+      "document_no": "INV-BD-2025-00248",
+      "sample_items": [
+        {
+          "description": "Recruitment consultancy service",
+          "qty": 7.0,
+          "rate": 1721.0,
+          "amount": 12047.0,
+          "hsn_code": "",
+          "uom": "Nos"
+        }
+      ]
+    },
+    {
+      "vendor_name": "TEST ION WATER",
+      "document_type": "tax_invoice",
+      "document_no": "TEST-001",
+      "sample_items": [
+        {
+          "description": "20 \" Wound Filter slim",
+          "qty": 5.0,
+          "rate": 650.0,
+          "amount": 0.0,
+          "hsn_code": "8421",
+          "uom": "Nos"
+        }
+      ]
+    }
+  ]
+}

@@ -2,13 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { FileText, CheckCircle, AlertTriangle, Upload, ArrowRight, Clock, DollarSign, Activity, Layers, Search, ShieldCheck, Zap } from 'lucide-react'
 import api from '../api/client.js'
+import quotationApi from '../api/quotationClient.js'
 import { useToast } from '../ToastContext.jsx'
-import { formatIndianCurrency, formatDocumentType, getDocTypeColor, getFileFormat, getFileFormatBadgeStyle } from './QuotationsList.jsx'
+import { formatIndianCurrency, formatDocumentType, getDocTypeColor, getFileFormat, getFileFormatBadgeStyle, formatDisplayDate } from './QuotationsList.jsx'
 
 function getPieArcPath(cx, cy, outerR, innerR, startAngleDeg, endAngleDeg) {
   let angleDiff = endAngleDeg - startAngleDeg
+  if (isNaN(angleDiff) || angleDiff <= 0) return ''
   if (angleDiff >= 360) angleDiff = 359.999
-  if (angleDiff <= 0) return ''
 
   const actualEndAngle = startAngleDeg + angleDiff
 
@@ -33,6 +34,9 @@ function getPieArcPath(cx, cy, outerR, innerR, startAngleDeg, endAngleDeg) {
 export default function Dashboard() {
   const [stats, setStats] = useState({ total_documents: 0, total_value_extracted: 0, extracted_invoices: 0, by_type: {}, quarantined_count: 0, recent_documents: [] })
   const [hoveredSlice, setHoveredSlice] = useState(null)
+  const [selectedType, setSelectedType] = useState(null)
+  const [displayedDocuments, setDisplayedDocuments] = useState([])
+  const [tableLoading, setTableLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const toast = useToast()
@@ -42,7 +46,8 @@ export default function Dashboard() {
     setError(null)
     try {
       const data = await api.getStats()
-      setStats(data)
+      setStats(data || {})
+      setDisplayedDocuments(data?.recent_documents || [])
     } catch (e) {
       setError(e.message)
       toast(e.message, 'error')
@@ -53,7 +58,66 @@ export default function Dashboard() {
 
   useEffect(() => { loadStats() }, [loadStats])
 
+  // Fetch documents for the selected category from API
+  useEffect(() => {
+    if (!selectedType) {
+      setDisplayedDocuments(stats.recent_documents || [])
+      return
+    }
+
+    let isMounted = true
+    setTableLoading(true)
+    quotationApi.listQuotations({ document_type: selectedType, limit: 15 })
+      .then(data => {
+        if (isMounted) {
+          const formatted = (data?.items || []).map(d => ({
+            id: d.id,
+            document_no: d.quotation_no || d.document_no,
+            document_type: d.document_type,
+            document_date: d.quotation_date || d.document_date,
+            grand_total_final: d.grand_total_final,
+            extraction_status: d.extraction_status,
+            source_file: d.source_file,
+            vendor_name: d.vendor_name,
+            customer_name: d.customer_name
+          }))
+          setDisplayedDocuments(formatted)
+          setTableLoading(false)
+        }
+      })
+      .catch(err => {
+        if (isMounted) setTableLoading(false)
+      })
+
+    return () => { isMounted = false }
+  }, [selectedType, stats.recent_documents])
+
+
   const totalDocs = stats.total_documents || 1
+
+  const entries = stats.by_type ? Object.entries(stats.by_type) : []
+  let currentAngle = 0
+  const totalCount = stats.total_documents || entries.reduce((acc, [, c]) => acc + c, 0) || 1
+
+  const pieSlices = entries.map(([type, count]) => {
+    const pct = (count / totalCount) * 100
+    const startAngle = currentAngle
+    const endAngle = currentAngle + (pct / 100) * 360
+    currentAngle = endAngle
+    const color = getDocTypeColor(type)
+    return {
+      type,
+      count,
+      pct: pct.toFixed(1),
+      startAngle,
+      endAngle,
+      color,
+      label: formatDocumentType(type)
+    }
+  })
+
+  const activeItem = hoveredSlice || (selectedType ? pieSlices.find(s => s.type === selectedType) : null)
+
 
   return (
     <div>
@@ -91,283 +155,292 @@ export default function Dashboard() {
       {/* Interactive KPI Cards Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
         
-        {/* Card 1: Total Documents Ingested */}
         <Link
           to="/quotations"
           className="card kpi-card-interactive"
           style={{
             padding: 20,
-            background: 'linear-gradient(135deg, rgba(0,212,255,0.08) 0%, rgba(15,23,42,0.8) 100%)',
+            background: 'var(--kpi-gradient-1)',
             border: '1px solid rgba(0,212,255,0.25)',
             textDecoration: 'none',
             color: 'inherit',
-            display: 'block',
-            transition: 'all 0.25s ease-in-out',
-            cursor: 'pointer'
+            display: 'block'
           }}
-          title="Click to view all ingested documents in Explorer"
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, display: 'block' }}>Total Ingested</span>
-              <div style={{ fontSize: 28, fontWeight: 800, color: '#fff', marginTop: 4 }}>
-                {loading ? '...' : stats.total_documents}
-              </div>
-            </div>
-            <div style={{ width: 42, height: 42, borderRadius: 10, background: 'rgba(0,212,255,0.15)', color: 'var(--cyan)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(0,212,255,0.3)' }}>
-              <FileText size={20} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--cyan)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Ingested</span>
+            <div style={{ background: 'rgba(0,212,255,0.15)', padding: 8, borderRadius: 8 }}>
+              <FileText size={18} style={{ color: 'var(--cyan)' }} />
             </div>
           </div>
-          <div style={{ marginTop: 12, fontSize: 11, color: 'var(--cyan)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <Zap size={12} /> 100% Ingestion Active
-            </span>
+          <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{stats.total_documents}</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, fontSize: 12, color: 'var(--text-secondary)' }}>
+            <span>Archived Documents</span>
             <ArrowRight size={13} style={{ opacity: 0.7 }} />
           </div>
         </Link>
 
-        {/* Card 2: Extracted Invoices & Billing Docs */}
-        <Link
-          to="/quotations?type=invoice"
-          className="card kpi-card-interactive"
+        <div
+          className="card"
           style={{
             padding: 20,
-            background: 'linear-gradient(135deg, rgba(34,197,94,0.08) 0%, rgba(15,23,42,0.8) 100%)',
-            border: '1px solid rgba(34,197,94,0.25)',
-            textDecoration: 'none',
-            color: 'inherit',
-            display: 'block',
-            transition: 'all 0.25s ease-in-out',
-            cursor: 'pointer'
+            background: 'var(--kpi-gradient-2)',
+            border: '1px solid rgba(34,197,94,0.25)'
           }}
-          title="Click to filter Invoices & Billing Documents"
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, display: 'block' }}>Invoices & Billing Docs</span>
-              <div style={{ fontSize: 28, fontWeight: 800, color: '#fff', marginTop: 4 }}>
-                {loading ? '...' : (stats.extracted_invoices || stats.total_documents)}
-              </div>
-            </div>
-            <div style={{ width: 42, height: 42, borderRadius: 10, background: 'rgba(34,197,94,0.15)', color: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(34,197,94,0.3)' }}>
-              <CheckCircle size={20} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Extracted Value</span>
+            <div style={{ background: 'rgba(34,197,94,0.15)', padding: 8, borderRadius: 8 }}>
+              <DollarSign size={18} style={{ color: 'var(--green)' }} />
             </div>
           </div>
-          <div style={{ marginTop: 12, fontSize: 11, color: 'var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <ShieldCheck size={12} /> Filter Tax Invoices & POs
-            </span>
-            <ArrowRight size={13} style={{ opacity: 0.7 }} />
+          <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+            {formatIndianCurrency(stats.total_value_extracted)}
           </div>
-        </Link>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, fontSize: 12, color: 'var(--text-secondary)' }}>
+            <span>Audited & Reconciled Sum</span>
+            <ShieldCheck size={13} style={{ color: 'var(--green)', opacity: 0.8 }} />
+          </div>
+        </div>
 
-        {/* Card 3: Financial Value Processed */}
         <Link
-          to="/quotations"
+          to="/quotations?status=ok"
           className="card kpi-card-interactive"
           style={{
             padding: 20,
-            background: 'linear-gradient(135deg, rgba(168,85,247,0.08) 0%, rgba(15,23,42,0.8) 100%)',
+            background: 'var(--kpi-gradient-3)',
             border: '1px solid rgba(168,85,247,0.25)',
             textDecoration: 'none',
             color: 'inherit',
-            display: 'block',
-            transition: 'all 0.25s ease-in-out',
-            cursor: 'pointer'
+            display: 'block'
           }}
-          title="Click to view all financial line items in Explorer"
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, display: 'block' }}>Financial Value Processed</span>
-              <div style={{ fontSize: 22, fontWeight: 800, color: '#fff', marginTop: 6, letterSpacing: '-0.02em' }}>
-                {loading ? '...' : formatIndianCurrency(stats.total_value_extracted)}
-              </div>
-            </div>
-            <div style={{ width: 42, height: 42, borderRadius: 10, background: 'rgba(168,85,247,0.15)', color: 'var(--purple)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(168,85,247,0.3)' }}>
-              <DollarSign size={20} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#c084fc', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Verified Invoices</span>
+            <div style={{ background: 'rgba(168,85,247,0.15)', padding: 8, borderRadius: 8 }}>
+              <CheckCircle size={18} style={{ color: '#c084fc' }} />
             </div>
           </div>
-          <div style={{ marginTop: 12, fontSize: 11, color: 'var(--purple)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <Activity size={12} /> Reconciled Net Volume
-            </span>
+          <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{stats.extracted_invoices}</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, fontSize: 12, color: 'var(--text-secondary)' }}>
+            <span>{totalDocs > 0 ? ((stats.extracted_invoices / totalDocs) * 100).toFixed(0) : 0}% Ingestion Accuracy</span>
             <ArrowRight size={13} style={{ opacity: 0.7 }} />
           </div>
         </Link>
 
-        {/* Card 4: Audit Quarantine Queue */}
         <Link
           to="/quotations?status=needs_review"
           className="card kpi-card-interactive"
           style={{
             padding: 20,
-            background: 'linear-gradient(135deg, rgba(251,191,36,0.08) 0%, rgba(15,23,42,0.8) 100%)',
-            border: stats.quarantined_count > 0 ? '1px solid rgba(251,191,36,0.5)' : '1px solid rgba(251,191,36,0.25)',
+            background: stats.quarantined_count > 0 ? 'var(--kpi-gradient-4)' : 'var(--bg-card)',
+            border: stats.quarantined_count > 0 ? '1px solid rgba(245,158,11,0.35)' : '1px solid var(--border)',
             textDecoration: 'none',
             color: 'inherit',
-            display: 'block',
-            transition: 'all 0.25s ease-in-out',
-            cursor: 'pointer'
+            display: 'block'
           }}
-          title="Click to view Quarantine Audit Queue"
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, display: 'block' }}>Audit Quarantine Queue</span>
-              <div style={{ fontSize: 28, fontWeight: 800, color: stats.quarantined_count > 0 ? 'var(--amber)' : '#fff', marginTop: 4 }}>
-                {loading ? '...' : stats.quarantined_count}
-              </div>
-            </div>
-            <div style={{ width: 42, height: 42, borderRadius: 10, background: 'rgba(251,191,36,0.15)', color: 'var(--amber)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(251,191,36,0.3)' }}>
-              <AlertTriangle size={20} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--amber)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Needs Review</span>
+            <div style={{ background: 'rgba(245,158,11,0.15)', padding: 8, borderRadius: 8 }}>
+              <AlertTriangle size={18} style={{ color: 'var(--amber)' }} />
             </div>
           </div>
-          <div style={{ marginTop: 12, fontSize: 11, color: stats.quarantined_count > 0 ? 'var(--amber)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span>
-              {stats.quarantined_count > 0 ? 'Requires Line Item Audit' : 'Zero Flagged Discrepancies'}
-            </span>
+          <div style={{ fontSize: 32, fontWeight: 800, color: stats.quarantined_count > 0 ? 'var(--amber)' : 'var(--text-primary)', lineHeight: 1 }}>
+            {stats.quarantined_count}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, fontSize: 12, color: 'var(--text-secondary)' }}>
+            <span>{stats.quarantined_count > 0 ? 'Human Audit Required' : 'Zero Discrepancies'}</span>
             <ArrowRight size={13} style={{ opacity: 0.7 }} />
           </div>
         </Link>
       </div>
 
-      {/* Document Type Distribution Pie Chart Card */}
-      {stats.by_type && Object.keys(stats.by_type).length > 0 && (() => {
-        const entries = Object.entries(stats.by_type)
-        let currentAngle = 0
-        const totalCount = stats.total_documents || entries.reduce((acc, [, c]) => acc + c, 0) || 1
 
-        const pieSlices = entries.map(([type, count]) => {
-          const pct = (count / totalCount) * 100
-          const startAngle = currentAngle
-          const endAngle = currentAngle + (pct / 100) * 360
-          currentAngle = endAngle
-          const color = getDocTypeColor(type)
-          return {
-            type,
-            count,
-            pct: pct.toFixed(1),
-            startAngle,
-            endAngle,
-            color,
-            label: formatDocumentType(type)
-          }
-        })
-
-        const activeItem = hoveredSlice
-
-        return (
-          <div className="card mb-4" style={{ padding: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
+      {/* Document Type Distribution Interactive Wheel & Legend Card */}
+      {pieSlices.length > 0 && (
+        <div className="card mb-4" style={{ padding: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 8, color: '#fff' }}>
                 <Layers size={18} style={{ color: 'var(--cyan)' }} /> Document Type Distribution
               </h3>
+              {selectedType && (
+                <span style={{
+                  fontSize: 11,
+                  background: 'rgba(0, 212, 255, 0.12)',
+                  color: 'var(--cyan)',
+                  padding: '2px 8px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(0, 212, 255, 0.3)',
+                  fontWeight: 700
+                }}>
+                  Filtered: {formatDocumentType(selectedType)}
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {selectedType && (
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => { setSelectedType(null); setHoveredSlice(null); }}
+                  style={{ fontSize: 11, padding: '3px 8px', color: 'var(--text-muted)' }}
+                >
+                  Reset Filter
+                </button>
+              )}
               <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>
                 {entries.length} Classification Categories
               </span>
             </div>
+          </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 36, flexWrap: 'wrap' }}>
-              {/* Left Column: Interactive SVG Donut / Pie Chart */}
-              <div style={{ position: 'relative', width: 280, height: 280, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, margin: 'auto' }}>
-                <svg width="280" height="280" viewBox="0 0 300 300" style={{ overflow: 'visible' }}>
-                  {pieSlices.map((slice) => {
-                    const isHovered = hoveredSlice?.type === slice.type
-                    const outerR = isHovered ? 138 : 128
-                    const innerR = isHovered ? 74 : 80
-                    const pathData = getPieArcPath(150, 150, outerR, innerR, slice.startAngle, slice.endAngle)
+          <div style={{ display: 'flex', alignItems: 'center', gap: 36, flexWrap: 'wrap' }}>
+            {/* Left Column: Interactive SVG Donut Wheel Chart */}
+            <div style={{ position: 'relative', width: 280, height: 280, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, margin: 'auto' }}>
+              <svg width="280" height="280" viewBox="0 0 300 300" style={{ overflow: 'visible' }}>
+                {pieSlices.map((slice) => {
+                  const isHovered = activeItem?.type === slice.type
+                  const isSelected = selectedType === slice.type
+                  const outerR = (isHovered || isSelected) ? 140 : 128
+                  const innerR = (isHovered || isSelected) ? 72 : 80
+                  const pathData = getPieArcPath(150, 150, outerR, innerR, slice.startAngle, slice.endAngle)
 
-                    return (
-                      <g key={slice.type} style={{ cursor: 'pointer' }}>
-                        <path
-                          d={pathData}
-                          fill={slice.color}
-                          opacity={hoveredSlice ? (isHovered ? 1 : 0.45) : 0.95}
-                          style={{ transition: 'all 0.2s ease-in-out' }}
-                          onMouseEnter={() => setHoveredSlice(slice)}
-                          onMouseLeave={() => setHoveredSlice(null)}
-                          onClick={() => window.location.href = `/quotations?type=${slice.type}`}
-                        />
-                      </g>
-                    )
-                  })}
-                </svg>
+                  return (
+                    <g key={slice.type} style={{ cursor: 'pointer' }}>
+                      <path
+                        d={pathData}
+                        fill={slice.color}
+                        opacity={activeItem ? ((isHovered || isSelected) ? 1 : 0.35) : 0.95}
+                        style={{
+                          transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                          filter: (isHovered || isSelected) ? `drop-shadow(0 0 8px ${slice.color}66)` : 'none'
+                        }}
+                        onMouseEnter={() => setHoveredSlice(slice)}
+                        onMouseLeave={() => setHoveredSlice(null)}
+                        onClick={() => setSelectedType(prev => prev === slice.type ? null : slice.type)}
+                      />
+                    </g>
+                  )
+                })}
+              </svg>
 
-                {/* Center Content Inside Donut */}
-                <div style={{ position: 'absolute', textAlign: 'center', pointerEvents: 'none', padding: '0 12px' }}>
-                  <div style={{ fontSize: 32, fontWeight: 800, color: activeItem ? activeItem.color : '#fff', lineHeight: 1.1 }}>
-                    {activeItem ? activeItem.count : totalCount}
-                  </div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', marginTop: 6, letterSpacing: '0.04em' }}>
-                    {activeItem ? activeItem.label : 'Total Documents'}
-                  </div>
-                  {activeItem && (
-                    <div style={{ fontSize: 14, fontWeight: 800, color: activeItem.color, marginTop: 4 }}>
-                      {activeItem.pct}%
-                    </div>
-                  )}
+              {/* Center Content Inside Donut */}
+              <div
+                style={{
+                  position: 'absolute',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  padding: '0 12px',
+                  userSelect: 'none'
+                }}
+                onClick={() => { setSelectedType(null); setHoveredSlice(null); }}
+              >
+                <div style={{ fontSize: 32, fontWeight: 800, color: activeItem ? activeItem.color : '#fff', lineHeight: 1.1, transition: 'color 0.2s ease' }}>
+                  {activeItem ? activeItem.count : totalCount}
+                </div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', marginTop: 6, letterSpacing: '0.04em' }}>
+                  {activeItem ? activeItem.label : 'Total Documents'}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: activeItem ? activeItem.color : 'var(--cyan)', marginTop: 4 }}>
+                  {activeItem ? `${activeItem.pct}%` : '100%'}
                 </div>
               </div>
+            </div>
 
-              {/* Right Column: Interactive Category Legend Grid */}
-              <div style={{ flex: 1, minWidth: 260, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-                {pieSlices.map((slice) => {
-                  const isHovered = hoveredSlice?.type === slice.type
-                  return (
-                    <Link
-                      key={slice.type}
-                      to={`/quotations?type=${slice.type}`}
-                      className="kpi-card-interactive"
-                      onMouseEnter={() => setHoveredSlice(slice)}
-                      onMouseLeave={() => setHoveredSlice(null)}
-                      style={{
-                        background: isHovered ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.02)',
-                        border: isHovered ? `1px solid ${slice.color}` : '1px solid var(--border)',
-                        borderRadius: 10,
-                        padding: '12px 14px',
-                        textDecoration: 'none',
-                        color: 'inherit',
-                        transition: 'all 0.2s ease',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justify: 'space-between'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            {/* Right Column: Interactive Category Legend Grid */}
+            <div style={{ flex: 1, minWidth: 260, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+              {pieSlices.map((slice) => {
+                const isHovered = hoveredSlice?.type === slice.type
+                const isSelected = selectedType === slice.type
+                return (
+                  <div
+                    key={slice.type}
+                    role="button"
+                    tabIndex={0}
+                    className="kpi-card-interactive"
+                    onMouseEnter={() => setHoveredSlice(slice)}
+                    onMouseLeave={() => setHoveredSlice(null)}
+                    onClick={() => setSelectedType(prev => prev === slice.type ? null : slice.type)}
+                    style={{
+                      background: isSelected ? `${slice.color}15` : (isHovered ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.02)'),
+                      border: isSelected ? `2px solid ${slice.color}` : (isHovered ? `1px solid ${slice.color}` : '1px solid var(--border)'),
+                      borderRadius: 10,
+                      padding: '12px 14px',
+                      color: 'inherit',
+                      transition: 'all 0.2s ease',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justify: 'space-between',
+                      cursor: 'pointer',
+                      boxShadow: isSelected ? `0 0 12px ${slice.color}33` : 'none'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ width: 9, height: 9, borderRadius: '50%', background: slice.color }}></span>
                         <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
                           {slice.label}
                         </span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                        <span style={{ fontSize: 20, fontWeight: 800, color: '#fff' }}>{slice.count}</span>
-                        <span style={{ fontSize: 13, fontWeight: 800, color: slice.color }}>{slice.pct}%</span>
-                      </div>
-                    </Link>
-                  )
-                })}
-              </div>
+                      {isSelected && (
+                        <span style={{ fontSize: 9, background: slice.color, color: '#000', padding: '1px 5px', borderRadius: 4, fontWeight: 800 }}>
+                          ACTIVE
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                      <span style={{ fontSize: 20, fontWeight: 800, color: '#fff' }}>{slice.count}</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: slice.color }}>{slice.pct}%</span>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
-        )
-      })()}
+        </div>
+      )}
 
-      {/* Recently Processed Documents List */}
+      {/* Recently Processed Documents List Synchronized with Wheel */}
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Clock size={16} style={{ color: 'var(--cyan)' }} /> Recently Ingested Documents
-          </h3>
-          <Link to="/quotations" className="btn btn-ghost btn-sm" style={{ color: 'var(--cyan)' }}>
-            View Explorer Directory <ArrowRight size={13} />
-          </Link>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Clock size={16} style={{ color: 'var(--cyan)' }} /> 
+              {selectedType ? `Recently Ingested (${formatDocumentType(selectedType)})` : 'Recently Ingested Documents'}
+            </h3>
+            <span style={{ fontSize: 11, background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-secondary)', padding: '2px 8px', borderRadius: 10 }}>
+              {displayedDocuments.length} shown
+            </span>
+
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {selectedType && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setSelectedType(null)}
+                style={{ fontSize: 11, padding: '3px 8px', color: 'var(--cyan)' }}
+              >
+                Show All Types
+              </button>
+            )}
+            <Link to={selectedType ? `/quotations?type=${selectedType}` : '/quotations'} className="btn btn-ghost btn-sm" style={{ color: 'var(--cyan)' }}>
+              View Explorer Directory <ArrowRight size={13} />
+            </Link>
+          </div>
         </div>
 
-        {loading ? (
+        {(loading || tableLoading) ? (
           <div style={{ padding: 40, textAlign: 'center' }}><div className="spinner" style={{ margin: 'auto' }} /></div>
-        ) : !stats.recent_documents || stats.recent_documents.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>No recent documents</div>
+        ) : displayedDocuments.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
+            No documents found for this category.{' '}
+            {selectedType && (
+              <button onClick={() => setSelectedType(null)} className="btn btn-ghost btn-sm" style={{ color: 'var(--cyan)', marginLeft: 8 }}>
+                Clear Filter
+              </button>
+            )}
+          </div>
         ) : (
           <div className="table-container" style={{ border: 'none', borderRadius: 0, marginBottom: 0 }}>
             <table className="quote-table">
@@ -376,7 +449,7 @@ export default function Dashboard() {
                   <th>Format</th>
                   <th>Doc / Ref #</th>
                   <th>Doc Type</th>
-                  <th>Vendor / Hospital</th>
+                  <th>Vendor</th>
                   <th>Customer / Patient</th>
                   <th>Doc Date</th>
                   <th className="text-right">Grand Total</th>
@@ -385,10 +458,23 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {stats.recent_documents.map((doc) => {
+                {displayedDocuments.map((doc) => {
                   const format = getFileFormat(doc.source_file)
+                  const isHoveredInTable = activeItem?.type === doc.document_type
                   return (
-                    <tr key={doc.id || doc.document_id}>
+                    <tr
+                      key={doc.id || doc.document_id}
+                      onMouseEnter={() => {
+                        const s = pieSlices.find(sl => sl.type === doc.document_type)
+                        if (s) setHoveredSlice(s)
+                      }}
+                      onMouseLeave={() => setHoveredSlice(null)}
+                      style={{
+                        background: isHoveredInTable ? `${getDocTypeColor(doc.document_type)}0D` : 'transparent',
+                        transition: 'background 0.15s ease'
+                      }}
+                    >
+
                       <td>
                         <span style={{
                           fontSize: 10,
@@ -405,28 +491,31 @@ export default function Dashboard() {
                         {doc.document_no || `Doc #${doc.id || doc.document_id}`}
                       </td>
                       <td>
-                        <span style={{ 
-                          color: getDocTypeColor(doc.document_type), 
-                          fontWeight: 700, 
-                          fontSize: 10, 
-                          textTransform: 'uppercase',
-                          background: `${getDocTypeColor(doc.document_type)}1A`,
-                          padding: '2px 6px',
-                          borderRadius: 4
-                        }}>
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedType(prev => prev === doc.document_type ? null : doc.document_type);
+                          }}
+                          style={{ 
+                            color: getDocTypeColor(doc.document_type), 
+                            fontWeight: 700, 
+                            fontSize: 10, 
+                            textTransform: 'uppercase',
+                            background: `${getDocTypeColor(doc.document_type)}1A`,
+                            padding: '2px 6px',
+                            borderRadius: 4,
+                            cursor: 'pointer'
+                          }}
+                          title="Click to filter by this document type"
+                        >
                           {formatDocumentType(doc.document_type)}
                         </span>
                       </td>
                       <td>{doc.vendor_name || 'N/A'}</td>
                       <td>{doc.customer_name || 'N/A'}</td>
-                      <td>
-                        {doc.document_date ? new Date(doc.document_date).toLocaleDateString('en-IN', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric'
-                        }) : 'N/A'}
-                      </td>
+                      <td>{formatDisplayDate(doc.document_date)}</td>
                       <td className="text-right" style={{ fontWeight: 700, color: 'var(--cyan)' }}>
+
                         {formatIndianCurrency(doc.grand_total_final)}
                       </td>
                       <td>

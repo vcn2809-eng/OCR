@@ -46,3 +46,9 @@ Thumbs.db
 /tmp/
 uploads/
 *.pdf.png
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+

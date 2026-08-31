@@ -78,6 +78,22 @@ export function getFileFormatBadgeStyle(format) {
   }
 }
 
+export function formatDisplayDate(val) {
+  if (!val || val === 'None' || val === 'null') return 'N/A'
+  try {
+    const d = new Date(val)
+    if (isNaN(d.getTime())) return String(val)
+    return d.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    })
+  } catch (e) {
+    return String(val)
+  }
+}
+
+
 function HighlightMatch({ text, query }) {
   if (!text || text === null || text === undefined) return <span></span>
   const displayStr = String(text).replace(/[\r\n]+/g, ' ')
@@ -108,22 +124,30 @@ function HighlightMatch({ text, query }) {
 
 export default function QuotationsList() {
   const [searchParams] = useSearchParams()
-  const initialStatus = searchParams.get('status') || ''
-  const initialType = searchParams.get('type') || searchParams.get('doc_type') || ''
+  const urlStatus = searchParams.get('status') || ''
+  const urlType = searchParams.get('type') || searchParams.get('doc_type') || ''
 
   const [quotations, setQuotations] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [limit] = useState(10)
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState(initialStatus)
-  const [docType, setDocType] = useState(initialType)
+  const [status, setStatus] = useState(urlStatus)
+  const [docType, setDocType] = useState(urlType)
   const [loading, setLoading] = useState(false)
   const [expandedDocs, setExpandedDocs] = useState({})
   const [searchMode, setSearchMode] = useState('documents') // 'documents' | 'flat_items'
   const [flatLineItems, setFlatLineItems] = useState([])
   const [flatLoading, setFlatLoading] = useState(false)
   
+  // Sync URL search params if navigating from external links / dashboard
+  useEffect(() => {
+    const s = searchParams.get('status') || ''
+    const t = searchParams.get('type') || searchParams.get('doc_type') || ''
+    if (s !== status) setStatus(s)
+    if (t !== docType) setDocType(t)
+  }, [searchParams])
+
   // Selection and Deletion State
   const [selectedDocIds, setSelectedDocIds] = useState([])
 
@@ -134,6 +158,7 @@ export default function QuotationsList() {
         const res = await quotationApi.searchDocuments({
           q: currentSearch,
           document_type: currentDocType || undefined,
+          status: currentStatus || undefined,
         })
         const items = res.items || []
         setQuotations(items)
@@ -163,6 +188,7 @@ export default function QuotationsList() {
     }
   }
 
+
   const fetchFlatLineItems = async (q) => {
     if (!q || !q.trim()) {
       setFlatLineItems([])
@@ -180,8 +206,11 @@ export default function QuotationsList() {
   }
 
   useEffect(() => {
-    fetchQuotations()
-  }, [page, status, docType])
+    const timer = setTimeout(() => {
+      fetchQuotations({ currentSearch: search, currentStatus: status, currentDocType: docType, currentPage: page })
+    }, 200)
+    return () => clearTimeout(timer)
+  }, [search, page, status, docType])
 
   useEffect(() => {
     if (searchMode === 'flat_items' && search.trim()) {
@@ -284,7 +313,10 @@ export default function QuotationsList() {
                 setSearch(val)
                 setPage(1)
               }}
-              onSubmit={() => setPage(1)}
+              onSubmit={() => {
+                setPage(1)
+                fetchQuotations({ currentSearch: search, currentPage: 1 })
+              }}
               placeholder="Search any item, CPT code, vendor, customer, rate, or amount..."
             />
           </div>
@@ -299,12 +331,14 @@ export default function QuotationsList() {
               }}
             >
               <option value="">All Document Types</option>
-              <option value="purchase_order">Purchase Order</option>
-              <option value="quotation">Quotation</option>
-              <option value="invoice_proforma">Proforma Invoice</option>
               <option value="invoice_final">Tax Invoice</option>
               <option value="patient_account_statement">Patient Account Statement</option>
+              <option value="quotation">Quotation</option>
+              <option value="invoice_proforma">Proforma Invoice</option>
+              <option value="purchase_order">Purchase Order</option>
+              <option value="invoice">All Invoices</option>
             </select>
+
 
             <select
               className="select"
@@ -349,7 +383,7 @@ export default function QuotationsList() {
                   <th>Doc Type</th>
                   <th>Format</th>
                   <th>Doc / Ref #</th>
-                  <th>Vendor / Hospital</th>
+                  <th>Vendor</th>
                   <th>Customer / Patient</th>
                   <th>Doc Date</th>
                   <th className="text-right">Grand Total</th>
@@ -578,7 +612,7 @@ export default function QuotationsList() {
                 <tr>
                   <th>Doc #</th>
                   <th>Doc Type</th>
-                  <th>Vendor / Hospital</th>
+                  <th>Vendor</th>
                   <th>Customer / Patient</th>
                   <th>Code / CPT</th>
                   <th>Description / Procedure</th>

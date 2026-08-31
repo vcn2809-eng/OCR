@@ -71,10 +71,12 @@ export const quotationApi = {
     if (params.q) q.append('q', params.q)
     if (params.vendor_id) q.append('vendor_id', params.vendor_id)
     if (params.document_type) q.append('document_type', params.document_type)
+    if (params.status) q.append('status', params.status)
     if (params.start_date) q.append('start_date', params.start_date)
     if (params.end_date) q.append('end_date', params.end_date)
     return request(`/search?${q.toString()}`)
   },
+
   searchLineItems: (query) => {
     const q = new URLSearchParams({ q: query })
     return request(`/search/line-items?${q.toString()}`)

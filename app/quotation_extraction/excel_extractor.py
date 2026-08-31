@@ -205,7 +205,7 @@ def extract_excel_quotation(file_path: Path) -> List[Tuple[Dict[str, Any], List[
 
     # Initialize quotation header data
     quotation_dict = {
-        "vendor_name": "AIC Enterprises Pvt Ltd",  # Default / fallback
+        "vendor_name": "TechVision Distributors Pvt Ltd",  # Default / fallback for commercial batch spreadsheets
         "vendor_gstin": None,
         "customer_name": None,
         "customer_gstin": None,

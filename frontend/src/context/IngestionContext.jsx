@@ -12,9 +12,28 @@ export function IngestionProvider({ children }) {
   const [batchCompleted, setBatchCompleted] = useState(false)
   const [batchStats, setBatchStats] = useState({ total: 0, okCount: 0, reviewCount: 0, failedCount: 0 })
   const [lastExtractedDoc, setLastExtractedDoc] = useState(null)
+  const [rateLimitEnabled, setRateLimitEnabled] = useState(() => {
+    const saved = localStorage.getItem('batchRateLimitEnabled')
+    return saved !== null ? saved === 'true' : true
+  })
   const toast = useToast()
 
   const MAX_BATCH_FILES = 15
+
+  const toggleRateLimit = () => {
+    setRateLimitEnabled(prev => {
+      const nextVal = !prev
+      localStorage.setItem('batchRateLimitEnabled', String(nextVal))
+      if (toast) {
+        if (nextVal) {
+          toast(`Batch Rate Limit Enabled (Max ${MAX_BATCH_FILES} files per batch)`, 'info')
+        } else {
+          toast('Batch Rate Limit Disabled (Unlimited files per batch allowed)', 'warning')
+        }
+      }
+      return nextVal
+    })
+  }
 
   const addFilesToQueue = (newFiles) => {
     if (!newFiles || newFiles.length === 0) return
@@ -22,16 +41,18 @@ export function IngestionProvider({ children }) {
     const incoming = Array.from(newFiles)
     const currentQueueCount = filesQueue.length
 
-    if (currentQueueCount >= MAX_BATCH_FILES) {
-      toast(`Batch rate limit reached: Maximum ${MAX_BATCH_FILES} files allowed per batch ingestion.`, 'error')
-      return
-    }
-
     let allowedFiles = incoming
-    if (currentQueueCount + incoming.length > MAX_BATCH_FILES) {
-      const allowedCount = MAX_BATCH_FILES - currentQueueCount
-      allowedFiles = incoming.slice(0, allowedCount)
-      toast(`Batch limit enforced: Only ${allowedCount} file(s) added. Maximum ${MAX_BATCH_FILES} files allowed per batch.`, 'error')
+    if (rateLimitEnabled) {
+      if (currentQueueCount >= MAX_BATCH_FILES) {
+        toast(`Batch rate limit reached: Maximum ${MAX_BATCH_FILES} files allowed per batch ingestion. Turn off rate limit to upload more.`, 'error')
+        return
+      }
+
+      if (currentQueueCount + incoming.length > MAX_BATCH_FILES) {
+        const allowedCount = MAX_BATCH_FILES - currentQueueCount
+        allowedFiles = incoming.slice(0, allowedCount)
+        toast(`Batch limit enforced: Only ${allowedCount} file(s) added. Maximum ${MAX_BATCH_FILES} files allowed per batch.`, 'error')
+      }
     }
 
     const added = allowedFiles.map((file, idx) => ({
@@ -172,6 +193,9 @@ export function IngestionProvider({ children }) {
       batchCompleted,
       batchStats,
       lastExtractedDoc,
+      rateLimitEnabled,
+      toggleRateLimit,
+      setRateLimitEnabled,
       addFilesToQueue,
       removeFileFromQueue,
       clearQueue,

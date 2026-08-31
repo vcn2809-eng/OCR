@@ -284,6 +284,7 @@ def save_quotation_to_db(
                 enquiry_ref=quotation_dict.get("enquiry_ref"),
                 enquiry_date=quotation_dict.get("enquiry_date"),
                 grand_total_taxable=quotation_dict.get("grand_total_taxable"),
+                total_discount=quotation_dict.get("total_discount"),
                 grand_total_cgst=quotation_dict.get("grand_total_cgst"),
                 grand_total_sgst=quotation_dict.get("grand_total_sgst"),
                 grand_total_final=quotation_dict.get("grand_total_final"),

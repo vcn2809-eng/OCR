@@ -49,6 +49,12 @@ OPENAI_API_KEY: str = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_MODEL: str = "gpt-4o-mini"
 OLLAMA_MODEL: str = os.environ.get("OLLAMA_MODEL", "richardyoung/olmocr2:7b-q8")
 
+# ── AI Extraction ─────────────────────────────────────────────────────────────
+AI_EXTRACTION_ENABLED: bool = os.environ.get("AI_EXTRACTION_ENABLED", "true").lower() == "true"
+AI_EXTRACTION_MODEL: str = os.environ.get("AI_EXTRACTION_MODEL", "llama3")
+AI_EXTRACTION_FALLBACK_MODEL: str = os.environ.get("AI_EXTRACTION_FALLBACK_MODEL", "richardyoung/olmocr2:7b-q8")
+AI_EXTRACTION_TIMEOUT: int = int(os.environ.get("AI_EXTRACTION_TIMEOUT", "90"))
+
 # ── OCR ───────────────────────────────────────────────────────────────────────
 TESSERACT_LANG: str = "eng"
 TESSERACT_CONFIG: str = "--oem 3 --psm 6"

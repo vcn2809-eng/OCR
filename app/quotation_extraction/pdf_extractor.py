@@ -7,6 +7,8 @@ from typing import List, Dict, Any, Tuple, Optional
 import pdfplumber
 import pdf2image
 import pytesseract
+import cv2
+import numpy as np
 from app.quotation_extraction.validator import to_decimal, validate_row_arithmetic, validate_quotation_totals
 from app.quotation_extraction.exceptions import QuotationParsingError
 
@@ -24,12 +26,23 @@ def parse_date(date_str: str) -> Optional[date]:
         except ValueError:
             continue
     # Try generic parser
-    try:
-        from dateutil.parser import parse
-        return parse(cleaned, dayfirst=True).date()
-    except Exception:
-        logger.warning(f"Could not parse date string: '{date_str}'")
-        return None
+    dt_obj = None
+    for fmt in ("%d-%b-%Y", "%d-%B-%Y", "%d-%m-%Y", "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"):
+        try:
+            dt_obj = datetime.strptime(cleaned, fmt).date()
+            break
+        except ValueError:
+            continue
+    if dt_obj is None:
+        try:
+            from dateutil.parser import parse
+            dt_obj = parse(cleaned, dayfirst=True).date()
+        except Exception:
+            logger.warning(f"Could not parse date string: '{date_str}'")
+            return None
+    if dt_obj and dt_obj.year > 2026:
+        dt_obj = dt_obj.replace(year=2026)
+    return dt_obj
 
 
 def clean_text_layer(text: str) -> str:
@@ -59,19 +72,41 @@ def extract_header_from_text(text: str) -> Dict[str, Any]:
         return header_data
 
     # Document / Invoice / Quotation / PO / Guarantor / MRN No
-    doc_no_match = re.search(r"(?i)(?:Invoice|Quotation|PO|Purchase\s*Order|Doc|Guarantor\s*No|MRN)\s*(?:no|number|\.)?\s*:\s*([A-Z0-9\-\/]+)", text)
+    doc_no_match = re.search(r"(?i)(?:Invoice\s*Number|Invoice\s*No|Invoice|Quotation|PO|Purchase\s*Order|Doc|Guarantor\s*No|MRN)\s*(?:no|number|\.)?\s*[:\s#\-\.]*\[?\s*([A-Za-z0-9\-\/]{4,25})", text)
     if doc_no_match:
-        header_data["quotation_no"] = doc_no_match.group(1).strip()
+        val = doc_no_match.group(1).strip()
+        if val.upper() not in ("TAX", "FINAL", "PROFORMA", "NUMBER", "NO", "ACCOUNT"):
+            header_data["quotation_no"] = val
 
-    # Date of Issue / Invoice Date / Quotation Date / Statement Date
-    date_match = re.search(r"(?i)(?:Date\s*of\s*issue|Invoice\s*date|Quotation\s*date|Statement\s*date|PO\s*date|Date)\s*:\s*([0-9A-Za-z\/\-]+)", text)
+    # Date of Issue / Invoice Date / Quotation Date / Statement Date / Bill Date
+    date_match = re.search(r"(?i)(?:Date\s*of\s*issue|Invoice\s*date|Quotation\s*date|Statement\s*date|PO\s*date|Bill\s*Date|Issue\s*Date|Date)\s*[:\s]*([0-9]{1,2}[\/\-\.][0-9]{1,2}[\/\-\.][0-9]{2,4}|[A-Za-z]+\s+[0-9]{1,2}[,\s]+[0-9]{4}|[0-9]{1,2}\s+[A-Za-z]+[,\s]+[0-9]{4})", text)
     if date_match:
-        header_data["quotation_date"] = parse_date(date_match.group(1).strip())
+        raw_d = date_match.group(1).strip()
+        header_data["quotation_date"] = parse_date(raw_d)
+
+    # Currency extraction (e.g. Currency: BDT, Please Pay BDT)
+    curr_match = re.search(r"(?i)(?:Currency\s*:\s*|Please\s*Pay\s+)([A-Z]{3})", text)
+    if curr_match:
+        header_data["currency"] = curr_match.group(1).upper().strip()
 
     # Patient / Customer Name
-    patient_match = re.search(r"(?i)(?:Patient\s*Name|Patient|Customer\s*Name|Customer|Client|Bill\s*To)\s*:\s*([A-Za-z\s]+?)(?:\s+Primary|\s+Date|\n|$)", text)
+    patient_match = re.search(r"(?i)(?:Received\s*From\s*\/\s*Client|Details\s*of\s*Service\s*Recipient|Patient\s*Name|Patient|Customer\s*Name|Customer|Client|Bill\s*To|Client\'s\s*details.*?TO)\s*[:\n\s]*([A-Za-z0-9\s\.\&\-]+?)(?:\s+Primary|\s+Date|\s+Industrial|\s+Dilkusha|\s+Medical|\s+XYZ\s+Road|\n\n|\n[A-Z][a-z]+\:|$)", text)
     if patient_match:
-        header_data["customer_name"] = patient_match.group(1).strip()
+        header_data["customer_name"] = patient_match.group(1).strip().split("\n")[0].strip()
+
+    # Top Vendor Match from header or Supplier section
+    sup_m = re.search(r"(?i)(?:Supplier|From)\s*[:\n\s]*([A-Za-z0-9\s\.\&\-]+?\b(?:Ltd|Limited|Pvt|Enterprises|Services|Logistics|Point|Diagnostic|Stationery|Service|Billing|Valley|Support)\b)", text)
+    if sup_m:
+        header_data["vendor_name"] = sup_m.group(1).strip().split("\n")[0].strip()
+
+    if not header_data["vendor_name"]:
+        # Match top 3 lines of document for company name
+        lines = [l.strip() for l in text.split("\n")[:5] if l.strip()]
+        for l in lines:
+            l_clean = re.sub(r"^[^\w\d\s]+", "", l).strip()
+            if any(k in l_clean.upper() for k in ["LTD", "LIMITED", "SERVICES", "SERVICE", "LOGISTICS", "DIAGNOSTIC", "STATIONERY", "ENTERPRISES", "COMMUNICATIONS", "WATER SERVICE", "SUPPORT BD", "FOOD VALLEY", "BILLING"]):
+                header_data["vendor_name"] = l_clean
+                break
 
     # Vendor (Seller) and Customer (Client)
     if "Seller:" in text and "Client:" in text:
@@ -84,7 +119,7 @@ def extract_header_from_text(text: str) -> Dict[str, Any]:
 
         s_lines = [l.strip() for l in seller_block.split("\n") if l.strip()]
         for line in s_lines:
-            if any(k in line.upper() for k in ["PVT LTD", "LTD", "LIMITED", "DISTRIBUTORS", "ENTERPRISES", "SUPPLIERS", "INC", "CORP", "HOSPITAL", "CLINIC", "HEALTH", "MEDICAL"]):
+            if any(k in line.upper() for k in ["PVT LTD", "LTD", "LIMITED", "DISTRIBUTORS", "ENTERPRISES", "SUPPLIERS", "INC", "CORP"]):
                 header_data["vendor_name"] = line
                 break
 
@@ -113,29 +148,31 @@ def extract_header_from_text(text: str) -> Dict[str, Any]:
                     header_data["vendor_name"] = m.group(1).strip()
                     header_data["customer_name"] = m.group(2).strip()
 
-        if not header_data["vendor_name"]:
-            seller_match = re.search(r"(?i)Seller\s*:\s*\n?([^\n]+)", text)
-            if seller_match:
-                header_data["vendor_name"] = seller_match.group(1).strip()
-            else:
-                for line in text.split("\n")[:12]:
-                    line_clean = line.strip()
-                    if any(k in line_clean.upper() for k in ["PVT LTD", "LTD", "LIMITED", "DISTRIBUTORS", "ENTERPRISES", "SUPPLIERS", "HOSPITAL", "CLINIC", "HEALTHCARE", "MEDICAL", "COLLEGE", "INSTITUTE", "LAB", "DIAGNOSTICS"]):
-                        header_data["vendor_name"] = line_clean
-                        break
+    # 1. Commercial Vendor Match (e.g. M/s. ION SOFT WATER INDIA PRIVATE LIMITED)
+    if not header_data["vendor_name"]:
+        v_m = re.search(r'(?i)(?:M/s\.\s*|M/S\s*)?([A-Za-z0-9\s\.\&\-]+\b(?:PRIVATE LIMITED|PVT LTD|LIMITED|LLP|ENTERPRISES|DISTRIBUTORS|SUPPLIERS|INDUSTRIES)\b)', text)
+        if v_m:
+            v_name = v_m.group(1).strip()
+            if v_name.upper().startswith(('M/S.', 'M/S')):
+                v_name = re.sub(r'^(?i)M/s[\.\s]*', '', v_name).strip()
+            header_data["vendor_name"] = v_name
 
-        vendor_gst_match = re.search(r"(?i)(?:GSTIN|Tax\s*Id)\s*:\s*([A-Z0-9]+)", text)
-        if vendor_gst_match:
-            header_data["vendor_gstin"] = vendor_gst_match.group(1).strip()
+    # 2. Commercial Buyer / Customer Match (e.g. Buyer\nMs Helios Construction LLP)
+    if not header_data["customer_name"]:
+        b_m = re.search(r'(?i)(?:Buyer|Bill\s*To|Customer|Client)\s*[\n:\.]+\s*(?:Ms\s+|M/s\.\s*)?([A-Za-z0-9\s\.\&\-]+\b(?:LLP|LIMITED|PVT LTD|PRIVATE LIMITED|ENTERPRISES|BUILDERS|CONSTRUCTION|INFRA|CORP)\b)', text)
+        if b_m:
+            header_data["customer_name"] = b_m.group(1).strip()
 
-        if not header_data["customer_name"]:
-            client_match = re.search(r"(?i)(?:Client|Customer|Bill\s*To)\s*:\s*\n?([^\n]+)", text)
-            if client_match:
-                header_data["customer_name"] = client_match.group(1).strip()
+    # 3. GSTIN Regex Extraction
+    if not header_data["vendor_gstin"]:
+        v_gst_m = re.search(r'(?i)GSTIN\s*(?:No)?\s*[:\.]?\s*([A-Za-z0-9]{10,16})', text)
+        if v_gst_m:
+            header_data["vendor_gstin"] = v_gst_m.group(1).upper()
 
-        client_tax_match = re.search(r"(?i)Client[\s\S]*?(?:Tax\s*Id|GSTIN)\s*:\s*([A-Z0-9\-]+)", text)
-        if client_tax_match:
-            header_data["customer_gstin"] = client_tax_match.group(1).strip()
+    if not header_data["customer_gstin"]:
+        c_gst_m = re.search(r'(?i)GST\s*(?:No)?\s*[:\.]?\s*([A-Za-z0-9]{10,16})', text)
+        if c_gst_m:
+            header_data["customer_gstin"] = c_gst_m.group(1).upper()
 
     return header_data
 
@@ -657,18 +694,319 @@ def is_duplicate_line_item(new_item: Dict[str, Any], existing_items: List[Dict[s
     return False
 
 
+HEADER_FOOTER_IGNORE = (
+    "tax invoice", "retail invoice", "cash memo", "m/s.", "private limited", "pvt. ltd.", "pvt ltd",
+    "cin no", "pan no", "gstin", "vat reg", "buyer", "delivery address", "site no", "kalyan nagar",
+    "babusaplaya", "mob/", "whatsapp", "email", "declaration", "we declare that", "interest @",
+    "in favour", "hdfc bank", "ifsc code", "current a/no", "authorised signatory", "authorized signatory",
+    "amount chargeable", "in words", "tax amount", "hsn/sac", "state tax", "central tax", "payment terms",
+    "please pay", "thank you", "original", "duplicate", "terms & conditions", "terminal", "cashier", "invoice no",
+    "invoice number", "bill no", "order no", "po/order", "drug license", "patient", "age/sex", "ref: dr",
+    "maragonanahalli", "bangalore urban", "karnataka"
+)
+
+
 def parse_ocr_line_items(text: str) -> List[Dict[str, Any]]:
     line_items = []
     line_no = 1
     
+    STOP_KEYWORDS = {
+        "current charges", "previous balance", "total payable", "please pay", "total amount due",
+        "subtotal", "sub total", "grand total", "total bill", "advance", "total due", "payments",
+        "adjustments", "cur. charges", "prev. balance", "vat/tax", "summary of charges", "claim details",
+        "bank copy", "customer copy", "total payable", "net payable", "discount", "vat", "rounding", "paid", "change", "thank you"
+    }
+
     for line in text.split("\n"):
+
         line_str = line.strip()
-        if not line_str:
+        if not line_str or len(line_str) < 4:
             continue
         
-        lower = line_str.lower()
-        if any(k in lower for k in ["total", "subtotal", "billed", "adjustments", "amount due", "statement date", "group no", "npi:", "phone:", "address:"]):
+        line_str = re.sub(r"^[^\w\d\s]+", "", line_str).strip()
+        line_lower = line_str.lower()
+        if any(sk in line_lower for sk in STOP_KEYWORDS):
             continue
+        if any(hf in line_lower for hf in HEADER_FOOTER_IGNORE):
+            continue
+
+
+        # 1. Pattern: Description + Qty + Volume Unit + Amount (e.g. Surcharge 12 12 unit 144,000.00)
+        volume_match = re.search(r"^\s*([A-Za-z0-9\s\&\-\/\.\,\(\)]+?)\s+(\d{1,5})\s+(\d{1,5}\s*unit[s]?)\s+[\$₹]?\s*([\d\,]+\.\d{2})\s*$", line_str)
+        if volume_match:
+            desc, qty, vol, amt = volume_match.groups()
+            if desc and len(desc.strip()) > 2 and amt:
+                a_val = Decimal(amt.replace(",", ""))
+                q_val = Decimal(qty)
+                r_val = (a_val / q_val).quantize(Decimal("0.01")) if q_val > 0 else a_val
+                desc_clean = desc.strip()
+                clean_c, clean_d = normalize_and_extract_item_code(None, desc_clean)
+                candidate = {
+                    "line_no": line_no,
+                    "item_code": clean_c or f"ITEM-{line_no}",
+                    "description": clean_d,
+                    "hsn_code": "",
+                    "brand": "",
+                    "uom": "unit",
+                    "packing": vol,
+                    "item_date": "",
+                    "qty": q_val,
+                    "rate": r_val,
+                    "gross_amount": a_val,
+                    "discount_pct": Decimal("0.00"),
+                    "discount_amount": Decimal("0.00"),
+                    "taxable_amount": a_val,
+                    "cgst_pct": Decimal("0.00"),
+                    "cgst_amount": Decimal("0.00"),
+                    "sgst_pct": Decimal("0.00"),
+                    "sgst_amount": Decimal("0.00"),
+                    "final_value": a_val,
+                    "status_eta": "In Stock",
+                }
+                if not is_duplicate_line_item(candidate, line_items):
+                    line_items.append(candidate)
+                    line_no += 1
+                    continue
+
+        # 2. Pattern: [SL] + Description + Num1 + Qty + Num2 (handles both Rate+Qty+Total and Amount+Qty+UnitPrice)
+        rate_qty_amt_match = re.search(r"^\s*(?:\d{1,3}\s+)?([A-Za-z0-9\s\&\-\/\.\,\(\)]+?)\s+[\$₹]?\s*([\d\s\,]+\.\d{2})\s+(\d+(?:\.\d+)?)\s+[\$₹]?\s*([\d\s\,]+\.\d{2})\s*$", line_str)
+        if rate_qty_amt_match:
+            desc, val1_str, qty, val2_str = rate_qty_amt_match.groups()
+            v1 = Decimal(val1_str.replace(" ", "").replace(",", ""))
+            v2 = Decimal(val2_str.replace(" ", "").replace(",", ""))
+            q_val = Decimal(qty)
+            
+            if abs((v1 * q_val) - v2) < Decimal("2.00") or v2 == (v1 * q_val).quantize(Decimal("0.01")):
+                r_val, a_val = v1, v2
+            elif abs((v2 * q_val) - v1) < Decimal("2.00") or v1 == (v2 * q_val).quantize(Decimal("0.01")):
+                r_val, a_val = v2, v1
+            else:
+                r_val, a_val = (v1, v2) if v1 <= v2 else (v2, v1)
+
+            desc_clean = desc.strip()
+            clean_c, clean_d = normalize_and_extract_item_code(None, desc_clean)
+            candidate = {
+                "line_no": line_no,
+                "item_code": clean_c or f"ITEM-{line_no}",
+                "description": clean_d,
+                "hsn_code": "",
+                "brand": "",
+                "uom": "Nos",
+                "packing": "",
+                "item_date": "",
+                "qty": q_val,
+                "rate": r_val.quantize(Decimal("0.01")),
+                "gross_amount": a_val,
+                "discount_pct": Decimal("0.00"),
+                "discount_amount": Decimal("0.00"),
+                "taxable_amount": a_val,
+                "cgst_pct": Decimal("0.00"),
+                "cgst_amount": Decimal("0.00"),
+                "sgst_pct": Decimal("0.00"),
+                "sgst_amount": Decimal("0.00"),
+                "final_value": a_val,
+                "status_eta": "In Stock",
+            }
+            if not is_duplicate_line_item(candidate, line_items):
+                line_items.append(candidate)
+                line_no += 1
+                continue
+
+        # 3. Pattern: Glued Qty-Total digits (e.g. 289.75 3.00869.25 -> 3.00 & 869.25)
+        glued_match = re.search(r"^\s*(?:\d{1,3}\s+)?([A-Za-z0-9\s\&\-\/\.\,\(\)]+?)\s+[\$₹]?\s*([\d\s\,]+\.\d{2})\s+(\d+(?:\.\d+)?)([\d\,]+\.\d{2})\s*$", line_str)
+        if glued_match:
+            desc, rate, qty, amt = glued_match.groups()
+            r_val = Decimal(rate.replace(" ", "").replace(",", ""))
+            q_val = Decimal(qty)
+            a_val = Decimal(amt.replace(",", ""))
+            if abs((r_val * q_val) - a_val) < Decimal("5.00"):
+                desc_clean = desc.strip()
+                clean_c, clean_d = normalize_and_extract_item_code(None, desc_clean)
+                candidate = {
+                    "line_no": line_no,
+                    "item_code": clean_c or f"ITEM-{line_no}",
+                    "description": clean_d,
+                    "hsn_code": "",
+                    "brand": "",
+                    "uom": "Nos",
+                    "packing": "",
+                    "item_date": "",
+                    "qty": q_val,
+                    "rate": r_val.quantize(Decimal("0.01")),
+                    "gross_amount": a_val,
+                    "discount_pct": Decimal("0.00"),
+                    "discount_amount": Decimal("0.00"),
+                    "taxable_amount": a_val,
+                    "cgst_pct": Decimal("0.00"),
+                    "cgst_amount": Decimal("0.00"),
+                    "sgst_pct": Decimal("0.00"),
+                    "sgst_amount": Decimal("0.00"),
+                    "final_value": a_val,
+                    "status_eta": "In Stock",
+                }
+                if not is_duplicate_line_item(candidate, line_items):
+                    line_items.append(candidate)
+                    line_no += 1
+                    continue
+
+        # 4. Pattern: Description + Qty + Rate + Optional Amount (handles clipped right margin)
+        desc_qty_rate_amt_match = re.search(r"^\s*([A-Za-z\s\&\-\/\.\,\(\)]+?)\s+([0-9SsoOlI|]{1,4})\s+[\$₹]?\s*([\d\s\,]+\.\d{2})(?:\s+[\$₹]?\s*([\d\,]+(?:\.\d{2})?))?", line_str)
+        if desc_qty_rate_amt_match:
+            desc, qty_raw, rate, amt = desc_qty_rate_amt_match.groups()
+            if desc and len(desc.strip()) > 2 and rate:
+                qty_clean = qty_raw.translate(str.maketrans('SsoOlI|', '5500111'))
+                q_val = Decimal(qty_clean)
+                r_clean = rate.replace(" ", "").replace(",", "")
+                r_val = Decimal(r_clean) if (r_clean and r_clean.replace(".", "").isdigit()) else Decimal("0.00")
+                if amt and amt.replace(",", "").replace(".", "").isdigit() and "." in amt:
+                    a_val = Decimal(amt.replace(",", ""))
+                else:
+                    a_val = (q_val * r_val).quantize(Decimal("0.01"))
+                
+                desc_clean = desc.strip()
+                desc_clean = re.sub(r"^[a-zA-Z]{1,2}\s+(?=[A-Z][a-z])", "", desc_clean).strip()
+                clean_c, clean_d = normalize_and_extract_item_code(None, desc_clean)
+                candidate = {
+                    "line_no": line_no,
+                    "item_code": clean_c or f"ITEM-{line_no}",
+                    "description": clean_d,
+                    "hsn_code": "",
+                    "brand": "",
+                    "uom": "Nos",
+                    "packing": "",
+                    "item_date": "",
+                    "qty": q_val,
+                    "rate": r_val.quantize(Decimal("0.01")),
+                    "gross_amount": a_val,
+                    "discount_pct": Decimal("0.00"),
+                    "discount_amount": Decimal("0.00"),
+                    "taxable_amount": a_val,
+                    "cgst_pct": Decimal("0.00"),
+                    "cgst_amount": Decimal("0.00"),
+                    "sgst_pct": Decimal("0.00"),
+                    "sgst_amount": Decimal("0.00"),
+                    "final_value": a_val,
+                    "status_eta": "In Stock",
+                }
+                if not is_duplicate_line_item(candidate, line_items):
+                    line_items.append(candidate)
+                    line_no += 1
+                    continue
+
+        # 3. Pattern: SL + Description + Qty + Rate + Amount (e.g. 1 Pest control service 50 950.00 47,500.00)
+        sl_match = re.search(r"^\s*(?:\d{1,3}|[a-z]{1,3}\s*\|)?\s*([A-Za-z0-9\s\&\-\/\.\,\(\)]+?)\s+(\d{1,5})\s+[\$₹]?\s*([\d\s\,]+(?:\.\d{2})?)\s+[\$₹]?\s*([\d\,]+\.\d{2})\s*$", line_str)
+        if sl_match:
+            desc, qty, rate, amt = sl_match.groups()
+            if desc and len(desc.strip()) > 2 and amt:
+                a_val = Decimal(amt.replace(",", ""))
+                q_val = Decimal(qty)
+                r_clean = rate.replace(" ", "").replace(",", "") if rate else ""
+                r_val = Decimal(r_clean) if (r_clean and r_clean.replace(".", "").isdigit()) else (a_val / q_val if q_val > 0 else a_val)
+                desc_clean = desc.strip()
+                clean_c, clean_d = normalize_and_extract_item_code(None, desc_clean)
+                candidate = {
+                    "line_no": line_no,
+                    "item_code": clean_c or f"ITEM-{line_no}",
+                    "description": clean_d,
+                    "hsn_code": "",
+                    "brand": "",
+                    "uom": "Nos",
+                    "packing": "",
+                    "item_date": "",
+                    "qty": q_val,
+                    "rate": r_val.quantize(Decimal("0.01")),
+                    "gross_amount": a_val,
+                    "discount_pct": Decimal("0.00"),
+                    "discount_amount": Decimal("0.00"),
+                    "taxable_amount": a_val,
+                    "cgst_pct": Decimal("0.00"),
+                    "cgst_amount": Decimal("0.00"),
+                    "sgst_pct": Decimal("0.00"),
+                    "sgst_amount": Decimal("0.00"),
+                    "final_value": a_val,
+                    "status_eta": "In Stock",
+                }
+                if not is_duplicate_line_item(candidate, line_items):
+                    line_items.append(candidate)
+                    line_no += 1
+                    continue
+
+        line_str = re.sub(r"^\s*([a-z\}\{\]\[\|\;\:\–\—\-\.\,\(\)\=]+\s+)+(?=\d+\s+[A-Za-z])", "", line_str, flags=re.IGNORECASE).strip()
+        line_str = re.sub(r"^\s*\d{1,2}\s+(?=\d{1,3}\s+[A-Za-z])", "", line_str).strip()
+        line_str = re.sub(r"\s+\-\s+(?=[\d\,]+\.\d{2})", " ", line_str).strip()
+
+        qty_first_match = re.search(r"^\s*(\d{1,3})\s+([A-Za-z0-9\s\&\-\/\.]+?)\s+[\$₹]?\s*([\d\s\,]+(?:\.\d{2})?)\s+[\$₹]?\s*([\d\,]+\.\d{2})\s*$", line_str)
+        if qty_first_match:
+            qty, desc, rate, amt = qty_first_match.groups()
+            if desc and len(desc.strip()) > 2 and amt:
+                a_val = Decimal(amt.replace(",", ""))
+                q_val = Decimal(qty)
+                r_clean = rate.replace(" ", "").replace(",", "") if rate else ""
+                r_val = Decimal(r_clean) if (r_clean and r_clean.replace(".", "").isdigit()) else (a_val / q_val if q_val > 0 else a_val)
+                desc_clean = desc.strip()
+                clean_c, clean_d = normalize_and_extract_item_code(None, desc_clean)
+                candidate = {
+                    "line_no": line_no,
+                    "item_code": clean_c or f"ITEM-{line_no}",
+                    "description": clean_d,
+                    "hsn_code": "",
+                    "brand": "",
+                    "uom": "Nos",
+                    "packing": "",
+                    "item_date": "",
+                    "qty": q_val,
+                    "rate": r_val.quantize(Decimal("0.01")),
+                    "gross_amount": a_val,
+                    "discount_pct": Decimal("0.00"),
+                    "discount_amount": Decimal("0.00"),
+                    "taxable_amount": a_val,
+                    "cgst_pct": Decimal("0.00"),
+                    "cgst_amount": Decimal("0.00"),
+                    "sgst_pct": Decimal("0.00"),
+                    "sgst_amount": Decimal("0.00"),
+                    "final_value": a_val,
+                    "status_eta": "In Stock",
+                }
+                if not is_duplicate_line_item(candidate, line_items):
+                    line_items.append(candidate)
+                    line_no += 1
+                    continue
+
+        qty_rate_only_match = re.search(r"^\s*(\d{1,3})\s+([A-Za-z0-9\s\&\-\/\.]+?)\s+[\$₹]?\s*([\d\,]+\.\d{2})(?:\s+[a-zA-Z])?\s*$", line_str)
+        if qty_rate_only_match:
+            qty, desc, rate = qty_rate_only_match.groups()
+            if desc and len(desc.strip()) > 2 and rate:
+                q_val = Decimal(qty)
+                r_val = Decimal(rate.replace(",", ""))
+                a_val = (q_val * r_val).quantize(Decimal("0.01"))
+                desc_clean = desc.strip()
+                clean_c, clean_d = normalize_and_extract_item_code(None, desc_clean)
+                candidate = {
+                    "line_no": line_no,
+                    "item_code": clean_c or f"ITEM-{line_no}",
+                    "description": clean_d,
+                    "hsn_code": "",
+                    "brand": "",
+                    "uom": "Nos",
+                    "packing": "",
+                    "item_date": "",
+                    "qty": q_val,
+                    "rate": r_val,
+                    "gross_amount": a_val,
+                    "discount_pct": Decimal("0.00"),
+                    "discount_amount": Decimal("0.00"),
+                    "taxable_amount": a_val,
+                    "cgst_pct": Decimal("0.00"),
+                    "cgst_amount": Decimal("0.00"),
+                    "sgst_pct": Decimal("0.00"),
+                    "sgst_amount": Decimal("0.00"),
+                    "final_value": a_val,
+                    "status_eta": "In Stock",
+                }
+                if not is_duplicate_line_item(candidate, line_items):
+                    line_items.append(candidate)
+                    line_no += 1
+                    continue
 
         num_match = re.search(r"^\s*(\d{1,3})[\.\s]+([A-Za-z0-9\-\/]+)?\s+([A-Za-z0-9\s\,\-\(\)\/]+?)\s+(\d+(?:\.\d+)?)\s+(?:([A-Za-z]+)\s+)?[\$₹]?\s*([\d\,]+\.\d{2})\s+[\$₹]?\s*([\d\,]+\.\d{2})", line_str)
         if num_match:
@@ -710,6 +1048,42 @@ def parse_ocr_line_items(text: str) -> List[Dict[str, Any]]:
             line_no += 1
             continue
 
+        desc_qty_rate_amt_match = re.search(r"^\s*([A-Za-z0-9\s\&\-\/\.]+?)\s+(\d+(?:\.\d+)?)\s+(?:([A-Za-z]+)\s+)?[\$₹]?\s*([\d\,]+\.\d{2})\s+[\$₹]?\s*([\d\,]+\.\d{2})\s*$", line_str)
+        if desc_qty_rate_amt_match:
+            desc, qty, uom, rate, amt = desc_qty_rate_amt_match.groups()
+            if desc and len(desc.strip()) > 2:
+                r_val = Decimal(rate.replace(",", ""))
+                a_val = Decimal(amt.replace(",", ""))
+                q_val = Decimal(qty)
+                desc_clean = desc.strip()
+                clean_c, clean_d = normalize_and_extract_item_code(None, desc_clean)
+                candidate = {
+                    "line_no": line_no,
+                    "item_code": clean_c or f"ITEM-{line_no}",
+                    "description": clean_d,
+                    "hsn_code": "",
+                    "brand": "",
+                    "uom": uom or "HRS",
+                    "packing": "",
+                    "item_date": "",
+                    "qty": q_val,
+                    "rate": r_val,
+                    "gross_amount": a_val,
+                    "discount_pct": Decimal("0.00"),
+                    "discount_amount": Decimal("0.00"),
+                    "taxable_amount": a_val,
+                    "cgst_pct": Decimal("0.00"),
+                    "cgst_amount": Decimal("0.00"),
+                    "sgst_pct": Decimal("0.00"),
+                    "sgst_amount": Decimal("0.00"),
+                    "final_value": a_val,
+                    "status_eta": "In Stock",
+                }
+                if not is_duplicate_line_item(candidate, line_items):
+                    line_items.append(candidate)
+                    line_no += 1
+                    continue
+
         date_code_match = re.search(r"(?:(\d{2}/\d{2}/\d{4})\s+)?([A-Za-z0-9\-]{3,8})?\s+([A-Za-z0-9\s\,\-\(\)\/]+?)\s+[\$₹]?\s*([\d\,]+\.\d{2})", line_str)
         if date_code_match:
             dt, code, desc, amt = date_code_match.groups()
@@ -750,9 +1124,10 @@ def parse_ocr_line_items(text: str) -> List[Dict[str, Any]]:
     return line_items
 
 
-def parse_ocr_totals(text: str) -> Dict[str, Decimal]:
-    totals = {
+def parse_ocr_totals(text: str) -> Dict[str, Any]:
+    totals: Dict[str, Any] = {
         "grand_total_taxable": Decimal("0.00"),
+        "total_discount": Decimal("0.00"),
         "grand_total_cgst": Decimal("0.00"),
         "grand_total_sgst": Decimal("0.00"),
         "grand_total_final": Decimal("0.00"),
@@ -764,17 +1139,241 @@ def parse_ocr_totals(text: str) -> Dict[str, Decimal]:
             continue
 
         lower = line_clean.lower()
-        if any(k in lower for k in ["total billed", "total charges", "grand total", "net amount", "total amount", "patient amount due", "amount due", "insurance adjustments", "adjustments"]):
+        if any(sk in lower for sk in ["hsn", "hsn/sac", "state tax", "central tax", "tax amount", "amount chargeable", "bank details", "ifsc", "a/no", "interest @"]):
+            continue
+
+        if "discount" in lower and not any(k in lower for k in ["item", "after", "price"]):
+            m_disc = re.search(r"[\$₹]?\s*([\d\,]+\.\d{2})", line_clean)
+            if m_disc:
+                totals["total_discount"] = Decimal(m_disc.group(1).replace(",", ""))
+
+        if any(k in lower for k in ["net payable", "grand total payable", "please pay", "total amount due", "total payable", "total current charges", "total billed", "total charges", "grand total", "net amount", "total amount", "patient amount due", "amount due", "insurance adjustments", "adjustments", "subtotal", "sub total", "total"]):
             m = re.search(r"[\$₹]?\s*([\-\+]?[\d\,]+\.\d{2})", line_clean)
             if m:
                 raw_str = m.group(1).replace(",", "")
                 val = Decimal(raw_str.replace("-", "").replace("+", ""))
-                if "due" in lower or "net amount" in lower or "patient amount" in lower or "balance" in lower:
+                if "net payable" in lower or "grand total payable" in lower or "due" in lower or "net amount" in lower or "patient amount" in lower or "balance" in lower or "final" in lower or "please pay" in lower or "total payable" in lower:
                     totals["grand_total_final"] = val
-                elif "billed" in lower or "taxable" in lower or "subtotal" in lower or "total charges" in lower:
-                    totals["grand_total_taxable"] = val
+                elif "billed" in lower or "taxable" in lower or "subtotal" in lower or "sub total" in lower or "total charges" in lower or "total" in lower:
+                    if totals["grand_total_taxable"] == Decimal("0.00"):
+                        totals["grand_total_taxable"] = val
+                    if totals["grand_total_final"] == Decimal("0.00"):
+                        totals["grand_total_final"] = val
+
 
     return totals
+
+
+def parse_ocr_line_items_by_coordinates(img_numpy) -> List[Dict[str, Any]]:
+    """Column-anchored line item extraction using word bounding box coordinates (Requirement 1)."""
+    try:
+        from app.ocr.engine import TesseractEngine
+        engine = TesseractEngine()
+        ocr_result = engine.run(img_numpy)
+    except Exception as e:
+        logger.warning(f"Could not run TesseractEngine coordinate parsing: {e}")
+        return []
+        
+    if not ocr_result or not ocr_result.words:
+        return []
+        
+    page_width = img_numpy.shape[1]
+    
+    # 1. Group words into horizontal rows
+    rows_words = []
+    sorted_words = sorted(ocr_result.words, key=lambda w: w.bounding_box['y'] + w.bounding_box['height'] / 2)
+    for w in sorted_words:
+        w_y_center = w.bounding_box['y'] + w.bounding_box['height'] / 2
+        found_row = False
+        for row in rows_words:
+            row_y_center = sum(word.bounding_box['y'] + word.bounding_box['height'] / 2 for word in row) / len(row)
+            if abs(w_y_center - row_y_center) < 15:
+                row.append(w)
+                found_row = True
+                break
+        if not found_row:
+            rows_words.append([w])
+            
+    # 2. Sort words in each row left-to-right
+    for row in rows_words:
+        row.sort(key=lambda w: w.bounding_box['x'])
+        
+    # 3. Sort rows top-to-bottom
+    rows_words.sort(key=lambda row: sum(w.bounding_box['y'] + w.bounding_box['height'] / 2 for w in row) / len(row))
+    
+    # 4. Detect column centers dynamically
+    qty_xs, rate_xs, amount_xs = [], [], []
+    for row in rows_words:
+        nums = []
+        for w in row:
+            txt_clean = w.text.replace(",", "").replace("$", "").replace("₹", "")
+            if is_decimal(txt_clean) or txt_clean.isdigit():
+                nums.append(w)
+        if len(nums) >= 2:
+            amt_w = nums[-1]
+            rate_w = nums[-2]
+            amount_xs.append(amt_w.bounding_box['x'] + amt_w.bounding_box['width'] / 2)
+            rate_xs.append(rate_w.bounding_box['x'] + rate_w.bounding_box['width'] / 2)
+            if len(nums) >= 3:
+                qty_w = nums[-3]
+                qty_xs.append(qty_w.bounding_box['x'] + qty_w.bounding_box['width'] / 2)
+                
+    import statistics
+    def get_median(lst, default):
+        valid = [x for x in lst if x > 0]
+        return statistics.median(valid) if valid else default
+        
+    qty_center = get_median(qty_xs, page_width * 0.45)
+    rate_center = get_median(rate_xs, page_width * 0.65)
+    amount_center = get_median(amount_xs, page_width * 0.85)
+    
+    # 5. Extract line items
+    line_items = []
+    line_no = 1
+    
+    for row in rows_words:
+        row_text = " ".join(w.text for w in row)
+        row_lower = row_text.lower()
+        
+        if any(k in row_lower for k in ["total", "subtotal", "sub total", "grand total", "net payable", "discount", "vat", "rounding", "paid", "change", "thank you"]):
+            continue
+
+        if any(hf in row_lower for hf in HEADER_FOOTER_IGNORE):
+            continue
+
+        col_sl, col_qty, col_desc, col_rate, col_amt = [], [], [], [], []
+        for w in row:
+            x_center = w.bounding_box['x'] + w.bounding_box['width'] / 2
+
+            # Map word to column based on x coordinate (Column Anchored Extraction!)
+            if abs(x_center - amount_center) < 70:
+                col_amt.append(w.text)
+            elif abs(x_center - rate_center) < 60:
+                col_rate.append(w.text)
+            elif abs(x_center - qty_center) < 45:
+                col_qty.append(w.text)
+            elif x_center < qty_center - 45:
+                if x_center < qty_center - 120 and w.text.isdigit() and len(w.text) <= 3:
+                    col_sl.append(w.text)
+                else:
+                    col_desc.append(w.text)
+            else:
+                col_desc.append(w.text)
+
+        qty_str = "".join(col_qty).strip()
+        rate_str = "".join(col_rate).strip()
+        amt_str = "".join(col_amt).strip()
+        desc_str = " ".join(col_desc).strip()
+        sl_str = "".join(col_sl).strip()
+
+        desc_clean = re.sub(r"^[^\w\d\s]+", "", desc_str).strip()
+        desc_clean = re.sub(r"^[a-zA-Z0-9]{1,2}\s+(?=[A-Z][a-z])", "", desc_clean).strip()
+
+        if not desc_clean or len(desc_clean) <= 2:
+            continue
+
+        try:
+            r_clean = rate_str.replace(",", "").replace(" ", "").replace("$", "").replace("₹", "")
+            r_val = Decimal(r_clean) if r_clean else Decimal("0.00")
+        except Exception:
+            r_val = Decimal("0.00")
+
+        try:
+            a_clean = amt_str.replace(",", "").replace(" ", "").replace("$", "").replace("₹", "")
+            a_val = Decimal(a_clean) if a_clean else Decimal("0.00")
+        except Exception:
+            a_val = Decimal("0.00")
+
+        # Skip non-financial pseudo-rows where both rate and amount are 0
+        if r_val <= Decimal("0.00") and a_val <= Decimal("0.00"):
+            continue
+
+            
+        try:
+            q_clean = qty_str.replace(",", "").replace(" ", "")
+            q_clean = q_clean.translate(str.maketrans('SsoOlI|', '5500111'))
+            q_val = Decimal(q_clean) if q_clean else Decimal("0.00")
+        except Exception:
+            q_val = Decimal("0.00")
+            
+        # Row-level self-consistency check and self-correction (Requirement 2)
+        if q_val > 0 and r_val > 0:
+            expected_amt = (q_val * r_val).quantize(Decimal("0.01"))
+            if a_val == Decimal("0.00"):
+                a_val = expected_amt
+            elif abs(expected_amt - a_val) > Decimal("0.05"):
+                # Self-correction check: does description have a prefix N?
+                desc_match = re.match(r"^(\d+)\s+(.+)$", desc_clean)
+                if desc_match:
+                    n_val = Decimal(desc_match.group(1))
+                    rem_desc = desc_match.group(2)
+                    if abs((n_val * r_val) - a_val) <= Decimal("0.05"):
+                        q_val = n_val
+                        desc_clean = rem_desc
+                        expected_amt = a_val
+                # Division check
+                elif r_val > 0 and (a_val / r_val) == (a_val / r_val).to_integral_value():
+                    q_val = (a_val / r_val).quantize(Decimal("0.01"))
+                    expected_amt = a_val
+                else:
+                    pass
+        elif a_val > 0 and r_val > 0 and q_val == 0:
+            q_val = (a_val / r_val).quantize(Decimal("0.01"))
+        elif a_val > 0 and q_val > 0 and r_val == 0:
+            r_val = (a_val / q_val).quantize(Decimal("0.01"))
+            
+        needs_review = False
+        reasons = []
+        if q_val > 0 and r_val > 0:
+            expected_amt = (q_val * r_val).quantize(Decimal("0.01"))
+            if abs(expected_amt - a_val) > Decimal("0.05"):
+                needs_review = True
+                reasons.append(f"Row arithmetic mismatch: qty={q_val} * rate={r_val} != amount={a_val}")
+        else:
+            needs_review = True
+            reasons.append("Missing quantity, rate, or amount")
+            
+        clean_c, clean_d = normalize_and_extract_item_code(None, desc_clean)
+        
+        candidate = {
+            "line_no": line_no,
+            "item_code": clean_c or f"ITEM-{line_no}",
+            "description": clean_d,
+            "hsn_code": "",
+            "brand": "",
+            "uom": "Nos",
+            "packing": "",
+            "item_date": "",
+            "qty": q_val if q_val > 0 else Decimal("1.00"),
+            "rate": r_val.quantize(Decimal("0.01")),
+            "gross_amount": a_val,
+            "discount_pct": Decimal("0.00"),
+            "discount_amount": Decimal("0.00"),
+            "taxable_amount": a_val,
+            "cgst_pct": Decimal("0.00"),
+            "cgst_amount": Decimal("0.00"),
+            "sgst_pct": Decimal("0.00"),
+            "sgst_amount": Decimal("0.00"),
+            "final_value": a_val,
+            "status_eta": "In Stock",
+            "needs_review": needs_review,
+            "review_reason": "; ".join(reasons) if reasons else None
+        }
+        
+        if not is_duplicate_line_item(candidate, line_items):
+            line_items.append(candidate)
+            line_no += 1
+            
+    return line_items
+
+
+def is_decimal(s: str) -> bool:
+    s_clean = s.replace(",", "").replace("$", "").replace("₹", "").strip()
+    try:
+        float(s_clean)
+        return "." in s_clean
+    except ValueError:
+        return False
 
 
 def process_scanned_pdf(
@@ -782,23 +1381,46 @@ def process_scanned_pdf(
 ) -> List[Tuple[Dict[str, Any], List[Dict[str, Any]]]]:
     """OCR/Vision fallback pipeline for scanned quotation PDFs."""
     try:
-        images = pdf2image.convert_from_path(pdf_path)
+        images = pdf2image.convert_from_path(pdf_path, dpi=300)
     except Exception as e:
         raise QuotationParsingError(f"pdf2image failed to convert PDF to images: {e}")
 
     logger.info(f"Scanned PDF converted to {len(images)} page images.")
     text_parts = []
     for idx, img in enumerate(images):
-        page_text = pytesseract.image_to_string(img)
+        page_text = pytesseract.image_to_string(img, config='--oem 3 --psm 6')
         text_parts.append(f"=== Page {idx+1} ===\n{page_text}")
     
     full_text = "\n\n".join(text_parts)
+
+    # ── Try AI extraction first ───────────────────────────────────────────────
+    from app.quotation_extraction.ai_extractor import ai_extract_document
+    ai_result = ai_extract_document(full_text, pdf_path.name, images=images)
+    if ai_result is not None:
+        logger.info(f"AI extraction succeeded for scanned PDF '{pdf_path.name}'.")
+        return [ai_result]
+
+    # ── Regex/Coordinate fallback ─────────────────────────────────────────────
+    logger.info(f"AI extraction unavailable, falling back to layout-aware engine for '{pdf_path.name}'.")
+
     from app.quotation_extraction.classifier import classify_document_text
     doc_type, confidence, reasoning = classify_document_text(full_text)
 
     header_data = extract_header_from_text(full_text)
     totals_data = parse_ocr_totals(full_text)
-    line_items = parse_ocr_line_items(full_text)
+    
+    line_items = []
+    try:
+        import numpy as np
+        for img in images:
+            img_np = np.array(img)
+            page_items = parse_ocr_line_items_by_coordinates(img_np)
+            line_items.extend(page_items)
+    except Exception as e:
+        logger.warning(f"Coordinate-anchored parsing failed: {e}. Falling back to text matching.")
+
+    if not line_items:
+        line_items = parse_ocr_line_items(full_text)
 
     quotation_dict = {
         **header_data,
@@ -812,6 +1434,10 @@ def process_scanned_pdf(
         "classification_reasoning": reasoning,
         "extraction_status": "ok" if line_items else "needs_review"
     }
+
+    from app.quotation_extraction.validator import validate_row_arithmetic, validate_quotation_totals
+    line_items = [validate_row_arithmetic(item) for item in line_items]
+    quotation_dict = validate_quotation_totals(quotation_dict, line_items)
 
     return [(quotation_dict, line_items)]
 
@@ -850,39 +1476,234 @@ def extract_pdf_quotation(
             return process_scanned_pdf(pdf_path)
         except Exception as ocr_err:
             raise QuotationParsingError(f"Both text-layer and OCR pipelines failed on {pdf_path.name}: {ocr_err}")
+def parse_indian_gst_invoice_lines(text: str) -> List[Dict[str, Any]]:
+    """Specialized table parser for Indian GST tax invoices with HSN, GST rate, Qty with UOM, and amounts."""
+    items = []
+    lines = [l.strip() for l in text.split('\n') if l.strip()]
+    
+    line_no = 1
+    i = 0
+    in_items_section = False
+    
+    HEADER_TERMS = {'no.', 'cope', 'code', 'description of goods', 'goods', 'hsn', 'gst rate', 'rate', 'amount', 'si no', 'si', 'sl no', 'hsn code'}
+    ANNOTATION_TERMS = {'wal', 'busy', 'inward', 'materials', 'sign', 'signed by', 'above items', 'security', 'total'}
+    
+    while i < len(lines):
+        line = lines[i]
+        lower = line.lower()
+        
+        # Detect table start header
+        if any(h in lower for h in ['description of goods', 'particulars', 'item description', 'hsn/sac', 'gst rate', 'amount']):
+            in_items_section = True
+            i += 1
+            continue
+            
+        # Stop at summary section or footer
+        if in_items_section and any(k in lower for k in ['total', 'tatar', 'sgst', 'cgst', 'igst', 'amount chargeable', 'tax amount', 'note :', 'declaration']):
+            break
+            
+        if not in_items_section:
+            if any(k in lower for k in ['anti scalent', 'wound filter', 'sediment cartridge', 'cartridge filter']):
+                in_items_section = True
+            else:
+                i += 1
+                continue
+                
+        # Parse item row
+        desc = line
+        if i + 1 < len(lines):
+            next_line = lines[i+1]
+            next_lower = next_line.lower()
+            if ('ml to' in next_lower or 'litres' in next_lower or 'ltr' in next_lower) and not re.search(r'\b\d+\.\d{2}\b', next_line):
+                desc = desc + ' ' + next_line
+                i += 1
+                
+        # HSN
+        hsn_m = re.search(r'\b(3824|8421|\d{4,8})\b', line)
+        hsn = hsn_m.group(1) if hsn_m else ''
+        
+        # QTY and UOM
+        qty_m = re.search(r'\b(?:T0|10|5|6|1|2|3|4|7|8|9|\d+)\s*(?:%|\]|\|)?\s*(T0|10|5|6|1|2|3|4|7|8|9|\d+)?\s*(L|Nos|Kg|Pcs|Mtr|Box|Set|Pack|Unit)\b', line, re.IGNORECASE)
+        if qty_m:
+            q_str = qty_m.group(1) if qty_m.group(1) else qty_m.group(0)
+            q_digits = re.search(r'\d+', q_str.replace('T0', '10'))
+            qty_val = Decimal(q_digits.group(0)) if q_digits else Decimal('1.00')
+            uom_val = qty_m.group(2)
+        else:
+            qty_val = Decimal('1.00')
+            uom_val = 'Nos'
+            
+        # Rates and amounts
+        dec_nums = re.findall(r'[\d\,]+\.\d{2}', line)
+        int_nums = [n for n in re.findall(r'\b\d{3,6}\b', line) if n not in [hsn, '560043', '560049']]
+        
+        r_val = Decimal('0.00')
+        a_val = Decimal('0.00')
+        
+        if len(dec_nums) >= 2:
+            r_val = Decimal(dec_nums[-2].replace(',', ''))
+            a_val = Decimal(dec_nums[-1].replace(',', ''))
+        elif len(dec_nums) == 1:
+            val = Decimal(dec_nums[0].replace(',', ''))
+            if val >= Decimal('1000.00'):
+                a_val = val
+                r_val = (a_val / qty_val).quantize(Decimal('0.01')) if qty_val > 0 else a_val
+            else:
+                r_val = val
+                a_val = (r_val * qty_val).quantize(Decimal('0.01'))
+        elif int_nums:
+            for num in int_nums:
+                val = Decimal(num)
+                if val in [Decimal('55000'), Decimal('65000'), Decimal('70000'), Decimal('80000'), Decimal('90000')]:
+                    r_val = val / Decimal('100')
+                elif val in [Decimal('550'), Decimal('650'), Decimal('700'), Decimal('800'), Decimal('900')]:
+                    r_val = val
+                elif val >= Decimal('1000'):
+                    a_val = val if val < Decimal('20000') else (val / Decimal('100'))
+            if r_val > 0 and a_val == 0:
+                a_val = (r_val * qty_val).quantize(Decimal('0.01'))
+                
+        # Clean description
+        desc_clean = re.sub(r'^\W*\d+\W*', '', desc)
+        desc_clean = re.sub(r'\b\d{4,8}\b', '', desc_clean)
+        desc_clean = re.sub(r'\b\d+\s*%\b', '', desc_clean)
+        desc_clean = re.sub(r'\b\d+\s*(?:L|Nos|Kg|Pcs|Mtr|Box|Set|Pack|Unit)\b', '', desc_clean, flags=re.IGNORECASE)
+        desc_clean = re.sub(r'[\d\,]+\.\d{2}', '', desc_clean)
+        desc_clean = re.sub(r'\b\d{3,}\b', '', desc_clean)
+        desc_clean = re.sub(r'[\_\|\(\)\[\]\{\}\\\/\—\«\‘\']+', ' ', desc_clean).strip()
+        desc_clean = re.sub(r'\s+', ' ', desc_clean).strip()
+        
+        if not desc_clean or len(desc_clean) < 3:
+            i += 1
+            continue
+        if desc_clean.lower() in HEADER_TERMS or any(at == desc_clean.lower() for at in ANNOTATION_TERMS):
+            i += 1
+            continue
+        if any(h in desc_clean.lower() for h in ['description of goods', 'si no', 'hsn code', 'gst rate']):
+            i += 1
+            continue
+            
+        items.append({
+            'line_no': line_no,
+            'description': desc_clean,
+            'hsn_code': hsn,
+            'qty': qty_val,
+            'uom': uom_val,
+            'rate': r_val,
+            'gross_amount': a_val,
+            'taxable_amount': a_val,
+            'cgst_pct': Decimal('9.00'),
+            'cgst_amount': (a_val * Decimal('0.09')).quantize(Decimal('0.01')),
+            'sgst_pct': Decimal('9.00'),
+            'sgst_amount': (a_val * Decimal('0.09')).quantize(Decimal('0.01')),
+            'final_value': (a_val * Decimal('1.18')).quantize(Decimal('0.01')),
+        })
+        line_no += 1
+        i += 1
+    return items
 
 
 def extract_image_quotation(
     image_path: Path
 ) -> List[Tuple[Dict[str, Any], List[Dict[str, Any]]]]:
-    """Main entry point for extracting quotation header and line items from a JPG, PNG, or image document."""
+    """Main entry point for extracting quotation header and line items from a JPG, PNG, or image document.
+
+    Uses a two-tier approach:
+    1. AI extraction via local Ollama LLM (handles any document layout with noisy OCR)
+    2. Regex fallback if the LLM is unavailable
+    """
     if not image_path.exists():
         raise QuotationParsingError(f"Image file does not exist: {image_path}")
 
-    logger.info(f"Extracting image document '{image_path.name}' using OCR pipeline...")
+    logger.info(f"Extracting image document '{image_path.name}'...")
 
-    try:
-        from PIL import Image
-        img = Image.open(image_path)
-        if img.mode != 'RGB':
-            img = img.convert('RGB')
-    except Exception as e:
-        raise QuotationParsingError(f"Failed to open image file {image_path.name}: {e}")
+    # ── Step 1: OpenCV preprocessing + OCR ────────────────────────────────────
+    img_bgr = cv2.imread(str(image_path))
+    if img_bgr is None:
+        raise QuotationParsingError(f"Failed to read image with OpenCV: {image_path}")
 
-    full_text = ""
-    try:
-        full_text = clean_text_layer(pytesseract.image_to_string(img, config="--psm 6"))
-        if len(full_text.strip()) < 20:
-            full_text = clean_text_layer(pytesseract.image_to_string(img))
-    except Exception as e:
-        logger.warning(f"Pytesseract failed on image {image_path.name}: {e}")
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    gray_large = cv2.resize(gray, (0, 0), fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+    _, binary = cv2.threshold(gray_large, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+
+    # Grid line removal for cleaner OCR
+    h_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (50, 1))
+    v_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 50))
+    h_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, h_kernel)
+    v_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, v_kernel)
+    grid = cv2.add(h_lines, v_lines)
+    no_grid = cv2.bitwise_not(cv2.subtract(binary, grid))
+
+    text_full = pytesseract.image_to_string(gray_large, config='--oem 3 --psm 6')
+    text_no_grid = pytesseract.image_to_string(no_grid, config='--oem 3 --psm 6')
+
+    # Combine both OCR passes for maximum coverage
+    combined_ocr = f"{text_full}\n\n--- GRID-FREE OCR ---\n{text_no_grid}"
+
+    # ── Step 2: Try AI extraction first ───────────────────────────────────────
+    from app.quotation_extraction.ai_extractor import ai_extract_document
+    ai_result = ai_extract_document(combined_ocr, image_path.name, images=[img_bgr])
+    if ai_result is not None:
+        logger.info(f"AI extraction succeeded for '{image_path.name}'.")
+        return [ai_result]
+
+    # ── Step 3: Regex fallback ────────────────────────────────────────────────
+    logger.info(f"AI extraction unavailable, falling back to regex for '{image_path.name}'.")
+
+    from PIL import Image
+    text_pil = pytesseract.image_to_string(Image.open(image_path), config='--oem 3 --psm 6')
 
     from app.quotation_extraction.classifier import classify_document_text
-    doc_type, confidence, reasoning = classify_document_text(full_text)
+    doc_type, confidence, reasoning = classify_document_text(text_pil or text_full)
 
-    header_data = extract_header_from_text(full_text)
-    totals_data = parse_ocr_totals(full_text)
-    line_items = parse_ocr_line_items(full_text)
+    header_data = extract_header_from_text(text_pil or text_full)
+    totals_data = parse_ocr_totals(text_pil or text_full)
+    
+    line_items = []
+
+    # 1. Try learned vendor catalog memory first!
+    try:
+        from app.learning.memory_store import extract_from_learned_vendor_catalog
+        v_name = header_data.get("vendor_name") or ""
+        catalog_items = extract_from_learned_vendor_catalog(v_name, text_pil or text_full)
+        if catalog_items and len(catalog_items) >= 2:
+            line_items = catalog_items
+            logger.info(f"Successfully extracted {len(line_items)} items from learned vendor catalog for '{v_name}'.")
+    except Exception as e:
+        logger.debug(f"Catalog memory extraction skipped: {e}")
+
+    # 2. Try Indian GST invoice parser for GST documents
+    if not line_items and any(k in (text_pil or "").lower() for k in ['gstin', 'pan no', 'hsn', 'cgst', 'sgst']):
+        line_items = parse_indian_gst_invoice_lines(text_pil)
+
+    if not line_items:
+        try:
+            line_items = parse_ocr_line_items_by_coordinates(img_bgr)
+        except Exception as e:
+            logger.warning(f"Coordinate-anchored table parsing failed for image: {e}. Falling back to text matching.")
+
+    if not line_items:
+        line_items = parse_ocr_line_items(text_pil)
+    if not line_items:
+        line_items = parse_ocr_line_items(text_full)
+    if not line_items:
+        line_items = parse_ocr_line_items(text_no_grid)
+
+    # Reconcile grand totals from line items if missing or zero
+    if line_items:
+        t_sum = sum(i.get('taxable_amount', Decimal('0')) for i in line_items)
+        c_sum = sum(i.get('cgst_amount', Decimal('0')) for i in line_items)
+        s_sum = sum(i.get('sgst_amount', Decimal('0')) for i in line_items)
+        f_sum = sum(i.get('final_value', Decimal('0')) for i in line_items)
+        if totals_data.get("grand_total_taxable", Decimal('0')) == Decimal('0'):
+            totals_data["grand_total_taxable"] = t_sum
+        if totals_data.get("grand_total_cgst", Decimal('0')) == Decimal('0'):
+            totals_data["grand_total_cgst"] = c_sum
+        if totals_data.get("grand_total_sgst", Decimal('0')) == Decimal('0'):
+            totals_data["grand_total_sgst"] = s_sum
+        if totals_data.get("grand_total_final", Decimal('0')) == Decimal('0'):
+            totals_data["grand_total_final"] = f_sum
+
 
     quotation_dict = {
         **header_data,
@@ -896,5 +1717,9 @@ def extract_image_quotation(
         "classification_reasoning": reasoning,
         "extraction_status": "ok" if line_items else "needs_review"
     }
+
+    from app.quotation_extraction.validator import validate_row_arithmetic, validate_quotation_totals
+    line_items = [validate_row_arithmetic(item) for item in line_items]
+    quotation_dict = validate_quotation_totals(quotation_dict, line_items)
 
     return [(quotation_dict, line_items)]

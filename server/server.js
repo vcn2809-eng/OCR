@@ -38,7 +38,10 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 500 * 1024 * 1024 } // 500 MB max per file
+});
 
 // Serve source files statically for split-screen audit comparison
 app.use('/files', express.static(inputDir));
@@ -168,9 +171,9 @@ app.get('/api/quotations', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
-    const search = req.query.search || '';
+    const search = req.query.search || req.query.q || '';
     const status = req.query.status || '';
-    const documentType = req.query.document_type || '';
+    const documentType = req.query.document_type || req.query.type || req.query.doc_type || '';
     const vendorId = req.query.vendor_id || '';
 
     const conditions = ['1=1'];
@@ -211,23 +214,39 @@ app.get('/api/quotations', async (req, res) => {
       }
     }
 
-    if (status) {
+    if (status && status !== 'all') {
       conditions.push(`LOWER(d.extraction_status) = LOWER($${paramIndex})`);
       params.push(status);
       paramIndex++;
     }
 
-    if (documentType) {
-      conditions.push(`LOWER(d.document_type) = LOWER($${paramIndex})`);
-      params.push(documentType);
-      paramIndex++;
+    if (documentType && documentType !== 'all') {
+      const dtLower = documentType.toLowerCase().trim();
+      if (dtLower === 'invoice' || dtLower === 'tax_invoice' || dtLower === 'tax invoice') {
+        conditions.push(`(d.document_type IN ('invoice_final', 'invoice_proforma', 'invoice') OR d.document_type ILIKE '%invoice%')`);
+      } else if (dtLower === 'invoice_final') {
+        conditions.push(`d.document_type = 'invoice_final'`);
+      } else if (dtLower === 'invoice_proforma') {
+        conditions.push(`d.document_type = 'invoice_proforma'`);
+      } else if (dtLower === 'patient_account_statement' || dtLower === 'patient_statement' || dtLower === 'patient statement') {
+        conditions.push(`d.document_type IN ('patient_account_statement', 'patient_statement')`);
+      } else if (dtLower === 'quotation' || dtLower === 'quote') {
+        conditions.push(`d.document_type IN ('quotation', 'quote')`);
+      } else if (dtLower === 'purchase_order' || dtLower === 'po') {
+        conditions.push(`d.document_type IN ('purchase_order', 'po')`);
+      } else {
+        conditions.push(`(LOWER(d.document_type) = LOWER($${paramIndex}) OR d.document_type ILIKE $${paramIndex})`);
+        params.push(`%${dtLower}%`);
+        paramIndex++;
+      }
     }
 
-    if (vendorId) {
+    if (vendorId && vendorId !== 'all') {
       conditions.push(`d.vendor_id = $${paramIndex}`);
       params.push(parseInt(vendorId));
       paramIndex++;
     }
+
 
     const whereClause = conditions.join(' AND ');
 
@@ -271,7 +290,7 @@ app.get('/api/quotations/:id', async (req, res) => {
     const quoteRes = await pool.query(`
       SELECT d.id, d.document_type, d.document_no as quotation_no, d.document_date as quotation_date,
              d.validity_date, d.payment_terms, d.currency, d.enquiry_ref, d.enquiry_date,
-             d.grand_total_taxable, d.grand_total_cgst, d.grand_total_sgst, d.grand_total_final,
+             d.grand_total_taxable, d.total_discount, d.grand_total_cgst, d.grand_total_sgst, d.grand_total_final,
              d.grand_total_words, d.source_file, d.extraction_status, d.vendor_id, d.customer_id,
              v.name as vendor_name, v.gstin as vendor_gstin, v.address as vendor_address,
              c.name as customer_name, c.gstin as customer_gstin, c.address as customer_address
@@ -352,7 +371,9 @@ app.get('/api/review-queue', async (req, res) => {
 
 // GET /api/search with whitespace normalization and line-item row matching
 app.get('/api/search', async (req, res) => {
-  const { q, vendor_id, document_type, start_date, end_date } = req.query;
+  const { q, vendor_id, document_type, type, doc_type, status, start_date, end_date } = req.query;
+  const docTypeParam = document_type || type || doc_type || '';
+
   if (!q || !q.trim()) {
     return res.json({ items: [], suggestion: null });
   }
@@ -394,14 +415,36 @@ app.get('/api/search', async (req, res) => {
     `;
     const params = [`%${normalizedQ}%`, regexPattern];
 
-    if (vendor_id) {
+    if (status && status !== 'all') {
+      params.push(status);
+      sql += ` AND LOWER(d.extraction_status) = LOWER($${params.length})`;
+    }
+
+    if (vendor_id && vendor_id !== 'all') {
       params.push(vendor_id);
       sql += ` AND d.vendor_id = $${params.length}`;
     }
-    if (document_type) {
-      params.push(document_type);
-      sql += ` AND d.document_type = $${params.length}`;
+
+    if (docTypeParam && docTypeParam !== 'all') {
+      const dtLower = docTypeParam.toLowerCase().trim();
+      if (dtLower === 'invoice' || dtLower === 'tax_invoice' || dtLower === 'tax invoice') {
+        sql += ` AND (d.document_type IN ('invoice_final', 'invoice_proforma', 'invoice') OR d.document_type ILIKE '%invoice%')`;
+      } else if (dtLower === 'invoice_final') {
+        sql += ` AND d.document_type = 'invoice_final'`;
+      } else if (dtLower === 'invoice_proforma') {
+        sql += ` AND d.document_type = 'invoice_proforma'`;
+      } else if (dtLower === 'patient_account_statement' || dtLower === 'patient_statement' || dtLower === 'patient statement') {
+        sql += ` AND d.document_type IN ('patient_account_statement', 'patient_statement')`;
+      } else if (dtLower === 'quotation' || dtLower === 'quote') {
+        sql += ` AND d.document_type IN ('quotation', 'quote')`;
+      } else if (dtLower === 'purchase_order' || dtLower === 'po') {
+        sql += ` AND d.document_type IN ('purchase_order', 'po')`;
+      } else {
+        params.push(`%${dtLower}%`);
+        sql += ` AND (LOWER(d.document_type) = LOWER($${params.length}) OR d.document_type ILIKE $${params.length})`;
+      }
     }
+
     if (start_date) {
       params.push(start_date);
       sql += ` AND d.document_date >= $${params.length}`;
@@ -410,6 +453,7 @@ app.get('/api/search', async (req, res) => {
       params.push(end_date);
       sql += ` AND d.document_date <= $${params.length}`;
     }
+
 
     sql += ' ORDER BY d.document_date DESC, d.id DESC LIMIT 50';
 
@@ -552,7 +596,7 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
 
   const cmd = `"${pythonBinary}" -m app.quotation_extraction.run "${filePath}"`;
 
-  exec(cmd, { cwd: projectRoot }, (error, stdout, stderr) => {
+  exec(cmd, { cwd: projectRoot, timeout: 600000, maxBuffer: 50 * 1024 * 1024 }, (error, stdout, stderr) => {
     if (error) {
       console.error(`Exec error: ${error}`);
       console.error(`Stderr: ${stderr}`);
@@ -656,6 +700,30 @@ app.patch('/api/line-items/:id', async (req, res) => {
       return res.status(404).json({ error: 'Line item not found' });
     }
 
+    const fs = require('fs');
+    const path = require('path');
+    const datasetPath = path.join(__dirname, '../app/db/review_dataset.jsonl');
+    const dir = path.dirname(datasetPath);
+    if (!fs.existsSync(dir)){
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    for (const [key, val] of Object.entries(fields)) {
+      const originalValue = currentRes.rows[0][key];
+      if (originalValue !== undefined && String(originalValue) !== String(val)) {
+        const logEntry = {
+          timestamp: new Date().toISOString(),
+          line_item_id: id,
+          document_id: currentRes.rows[0].document_id,
+          field: key,
+          original_value: originalValue,
+          corrected_value: val,
+          document_crop: currentRes.rows[0].bounding_box || null
+        };
+        fs.appendFileSync(datasetPath, JSON.stringify(logEntry) + '\n', 'utf8');
+      }
+    }
+
     const mergedItem = { ...currentRes.rows[0], ...fields };
     const validation = validateRowArithmetic(mergedItem);
 
@@ -705,11 +773,20 @@ app.patch('/api/line-items/:id', async (req, res) => {
       [parentStatus, docId]
     );
 
+    // Trigger background active learning sync so learned memory updates in real-time
+    const { exec } = require('child_process');
+    const pythonPath = path.join(__dirname, '../.venv/bin/python');
+    const syncCmd = `"${pythonPath}" -m app.learning.sync_memory ${docId}`;
+    exec(syncCmd, (syncErr) => {
+      if (syncErr) console.warn('Active learning sync warning:', syncErr.message);
+    });
+
     res.json({
       line_item: updatedRow,
       quotation_status: parentStatus,
       remaining_flagged: remainingFlagged
     });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Database update failed' });
@@ -778,8 +855,9 @@ app.get('/api/stats', async (req, res) => {
       LEFT JOIN billing_vendors v ON d.vendor_id = v.id
       LEFT JOIN billing_customers c ON d.customer_id = c.id
       ORDER BY d.id DESC
-      LIMIT 8
+      LIMIT 50
     `);
+
 
     res.json({
       total_documents: totalDocs,

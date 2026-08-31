@@ -205,6 +205,7 @@ class Quotation(Base):
     enquiry_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
     enquiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     grand_total_taxable: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    total_discount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     grand_total_cgst: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     grand_total_sgst: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     grand_total_final: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
@@ -311,6 +312,7 @@ class BillingDocument(Base):
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     
     grand_total_taxable: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    total_discount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     grand_total_cgst: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     grand_total_sgst: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     grand_total_final: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
@@ -353,6 +355,7 @@ class BillingDocumentLineItem(Base):
     sgst_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     final_value: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     item_date: Mapped[str | None] = mapped_column(Text, nullable=True)
+    page_no: Mapped[int | None] = mapped_column(Integer, nullable=True, default=1)
     status_eta: Mapped[str | None] = mapped_column(Text, nullable=True)
     needs_review: Mapped[bool] = mapped_column(Boolean, default=False)
     review_reason: Mapped[str | None] = mapped_column(Text, nullable=True)

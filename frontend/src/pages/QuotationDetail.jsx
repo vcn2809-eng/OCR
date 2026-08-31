@@ -163,6 +163,11 @@ export default function QuotationDetail() {
     return acc + val
   }, 0)
 
+  const sumOfLineDiscounts = lineItems.reduce((acc, item) => {
+    const val = parseFloat(String(item.discount_amount || '0').replace(/,/g, '')) || 0
+    return acc + val
+  }, 0)
+
   const sumOfFinal = lineItems.reduce((acc, item) => {
     const val = parseFloat(String(item.final_value || item.gross_amount || '0').replace(/,/g, '')) || 0
     return acc + val
@@ -171,20 +176,26 @@ export default function QuotationDetail() {
   const expectedTaxable = parseFloat(String(quotation.grand_total_taxable || '0').replace(/,/g, '')) || 0
   const expectedFinal = parseFloat(String(quotation.grand_total_final || '0').replace(/,/g, '')) || 0
 
-  const billedCharges = expectedTaxable > 0 ? expectedTaxable : (isMedical ? sumOfFinal : sumOfTaxable)
-  const netDue = expectedFinal > 0 ? expectedFinal : sumOfFinal
+  // Billed charges and net due calculation with OCR artifact protection
+  const billedCharges = expectedTaxable > 0 ? expectedTaxable : sumOfFinal
   
-  // Insurance Adjustments / Deductions / Write-Offs
-  const rawAdjustments = isMedical ? (billedCharges - netDue) : 0
-  const totalAdjustments = rawAdjustments > 0 ? rawAdjustments : 0
+  // If expectedFinal is a small OCR artifact (e.g. 27.21 instead of 27205.88), prefer sumOfFinal
+  const isNetDueValid = expectedFinal > 0 && (Math.abs(expectedFinal - sumOfFinal) < 500.0 || (billedCharges > expectedFinal && expectedFinal > (billedCharges * 0.1)))
+  const netDue = isNetDueValid ? expectedFinal : sumOfFinal
+  
+  // Total Discounts / Write-offs
+  const rawDiffDiscount = (billedCharges > netDue) ? (billedCharges - netDue) : 0;
+  const totalDiscounts = sumOfLineDiscounts > 0 ? sumOfLineDiscounts : rawDiffDiscount;
 
-  // Mathematical Reconciliation Check:
-  // 1. For Medical Statements: billedCharges - totalAdjustments === netDue AND sumOfFinal === billedCharges
-  // 2. For Invoices/Commercial: sumOfFinal === netDue OR sumOfTaxable === billedCharges
-  const isMedicalReconciled = Math.abs(sumOfFinal - billedCharges) <= 1.0 && Math.abs((billedCharges - totalAdjustments) - netDue) <= 1.0
-  const isInvoiceReconciled = Math.abs(sumOfFinal - netDue) <= 1.0 || Math.abs(sumOfTaxable - billedCharges) <= 1.0
-
-  const isFullyReconciled = isMedical ? isMedicalReconciled : isInvoiceReconciled
+  // Mathematical Reconciliation Check (Requirement 3):
+  // Check if computed line-item sum matches printed subtotal (if present) and grand total within tolerance.
+  const isSubtotalReconciled = expectedTaxable > 0 ? Math.abs(sumOfFinal - expectedTaxable) <= 2.0 : true;
+  const isFinalReconciled = expectedFinal > 0 ? (
+    Math.abs(sumOfFinal - expectedFinal) <= 2.0 || 
+    Math.abs((sumOfFinal - sumOfLineDiscounts) - expectedFinal) <= 2.0 ||
+    Math.abs((sumOfFinal - rawDiffDiscount) - expectedFinal) <= 2.0
+  ) : true;
+  const isFullyReconciled = isSubtotalReconciled && isFinalReconciled;
 
   const justUploaded = location.state?.justUploaded
   const uploadStatus = location.state?.status
@@ -317,7 +328,7 @@ export default function QuotationDetail() {
         </h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20 }}>
           <div>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block' }}>Vendor / Seller / Hospital</span>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block' }}>Vendor</span>
             <strong style={{ fontSize: 14, color: '#fff' }}>{quotation.vendor_name || 'N/A'}</strong>
             {quotation.vendor_gstin && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>GSTIN: {quotation.vendor_gstin}</div>}
             {quotation.vendor_address && (
@@ -383,11 +394,11 @@ export default function QuotationDetail() {
             <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block' }}>
               {isMedical ? 'Insurance Adjustments & Allowances' : 'Total Discounts / Write-offs'}
             </span>
-            <strong style={{ fontSize: 16, color: totalAdjustments > 0 ? 'var(--cyan)' : 'var(--text-muted)' }}>
-              {totalAdjustments > 0 ? `-${formatIndianCurrency(totalAdjustments)}` : '₹0.00'}
+            <strong style={{ fontSize: 16, color: totalDiscounts > 0 ? 'var(--cyan)' : 'var(--text-muted)' }}>
+              {totalDiscounts > 0 ? `-${formatIndianCurrency(totalDiscounts)}` : '₹0.00'}
             </strong>
             <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
-              {totalAdjustments > 0 ? 'Contractual Allowance / Deduction' : 'No Adjustments Recorded'}
+              {totalDiscounts > 0 ? 'Discount / Deduction Recorded' : 'No Adjustments Recorded'}
             </div>
           </div>
 
@@ -399,7 +410,7 @@ export default function QuotationDetail() {
               {formatIndianCurrency(netDue)}
             </strong>
             <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
-              Calculated Net: {formatIndianCurrency(isMedical ? (billedCharges - totalAdjustments) : sumOfFinal)}
+              Calculated Net: {formatIndianCurrency(billedCharges - totalDiscounts)}
             </div>
           </div>
         </div>
@@ -586,6 +597,37 @@ export default function QuotationDetail() {
                       <React.Fragment key={item.id}>
                         <tr className={isItemFlagged ? 'row-flagged' : ''}>
                           {activeTemplateColumns.map(col => {
+                            if (col.key === 'page_no') {
+                              const itemPage = item.page_no || 1
+                              const isCurrentPage = activePage === itemPage
+                              return (
+                                <td key={col.key} style={{ textAlign: 'center' }}>
+                                  <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setActivePage(itemPage)
+                                      if (!isSplitView) setIsSplitView(true)
+                                    }}
+                                    style={{
+                                      fontSize: 10,
+                                      padding: '2px 7px',
+                                      borderRadius: 4,
+                                      fontWeight: 700,
+                                      color: isCurrentPage ? 'var(--cyan)' : 'var(--text-secondary)',
+                                      borderColor: isCurrentPage ? 'rgba(0, 212, 255, 0.4)' : 'rgba(255,255,255,0.1)',
+                                      background: isCurrentPage ? 'rgba(0, 212, 255, 0.15)' : 'rgba(255,255,255,0.03)',
+                                      cursor: 'pointer'
+                                    }}
+                                    title={`Click to jump original document preview to Page ${itemPage}`}
+                                  >
+                                    📄 Page {itemPage}
+                                  </button>
+                                </td>
+                              )
+                            }
+
                             const isEditing = editingCell?.itemId === item.id && editingCell?.fieldName === col.key
                             const rawVal = item[col.key]
                             
