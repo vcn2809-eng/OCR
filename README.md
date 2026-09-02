@@ -1,163 +1,180 @@
-# NissiGrid - Document Intelligence & Extraction Platform
+# NissiGrid - Document Intelligence & Financial Extraction Platform
 
-An enterprise-grade, automated document intelligence and financial data extraction platform for processing complex tax invoices, quotations, medical account statements, purchase orders, and Excel sheets.
-
----
-
-## 📋 System Prerequisites
-
-### 1. OS-Level Dependencies
-
-**macOS (via Homebrew):**
-```bash
-brew install tesseract poppler postgresql node
-```
-
-**Ubuntu / Debian (via APT):**
-```bash
-sudo apt update
-sudo apt install -y tesseract-ocr libtesseract-dev poppler-utils postgresql nodejs npm
-```
-
-**Windows:**
-- Install [Tesseract OCR for Windows](https://github.com/UB-Mannheim/tesseract/wiki) and add to PATH.
-- Install [Poppler for Windows](https://github.com/oschwartz10612/poppler-windows/releases/) and add `bin` to PATH.
-- Install [PostgreSQL](https://www.postgresql.org/download/windows/) and [Node.js](https://nodejs.org/).
+An enterprise-grade, automated document intelligence and financial data extraction platform for processing complex tax invoices, multi-page chemical/industrial quotations, medical account statements, purchase orders, and Excel spreadsheets.
 
 ---
 
-## ⚙️ Installation & Setup
+## 🛠️ Complete Tech Stack
 
-### Step 1: Clone Repository
+| Layer | Technologies Used | Purpose |
+|---|---|---|
+| **Frontend** | React 18, Vite, Lucide Icons, CSS Variables (Dark/Light theming) | Responsive web dashboard, PDF viewer, line-item grid, audit panels |
+| **Backend API** | Node.js (v18+ / v20+), Express, Multer, `pg` (node-postgres) | REST API, file upload handling, running Python extraction runner |
+| **OCR & Extraction** | Python 3.11+ / 3.13, `pdfplumber`, `pytesseract`, `pdf2image`, `OpenCV` (`cv2`), `openpyxl`, `pandas` | Document parsing, multi-line table unrolling, OCR fallback, layout parsing |
+| **AI / Vision (Optional)** | Ollama (`llama3`, `richardyoung/olmocr2:7b-q8`) | Vision LLM extraction fallback for complex unstructured scans |
+| **System Binaries** | `tesseract-ocr`, `poppler-utils` (or `poppler` on macOS) | OCR engine & PDF-to-image rendering binaries |
+| **Database** | PostgreSQL 14+ (or Docker PostgreSQL container) | Persistence for documents, line items, vendors, customers, audit logs |
+| **Containerization** | Docker, Docker Compose (Multi-stage build) | Optional 1-command deployment for zero-setup machines |
+
+---
+
+## 🚀 Option 1: Zero-Config Docker Setup (Recommended)
+
+If the target device has **Docker** and **Docker Compose** installed, no manual runtime installations are required:
 
 ```bash
-git clone https://github.com/vcn2809-eng/OCR.git
-cd OCR
+# 1. Clone the repository
+git clone https://github.com/vcn2809-eng/OCR.git nissigrid
+cd nissigrid
+
+# 2. Build and start the entire stack
+docker compose up -d --build
 ```
 
-### Step 2: Python Environment
+**Access the application:** Open `http://localhost:5001` (or `http://<device-ip>:5001`).
+
+---
+
+## 💻 Option 2: Native Setup (Step-by-Step for Any Device)
+
+### 1. Prerequisites Installation
+
+#### macOS (via Homebrew):
+```bash
+brew install tesseract poppler postgresql@14 node
+brew services start postgresql@14
+```
+
+#### Ubuntu / Debian Linux:
+```bash
+sudo apt-get update
+sudo apt-get install -y python3 python3-pip python3-venv nodejs npm tesseract-ocr poppler-utils postgresql postgresql-contrib
+sudo service postgresql start
+```
+
+#### Windows:
+1. Install **Node.js (LTS)** from [nodejs.org](https://nodejs.org).
+2. Install **Python 3.11+** from [python.org](https://python.org) (ensure *"Add Python to PATH"* is checked).
+3. Install **PostgreSQL** from [postgresql.org](https://www.postgresql.org).
+4. Install **Tesseract OCR** and **Poppler for Windows**, and add their `bin` directories to your System PATH.
+
+---
+
+### 2. Clone Repository
 
 ```bash
+git clone https://github.com/vcn2809-eng/OCR.git nissigrid
+cd nissigrid
+```
+
+---
+
+### 3. Database Initialization
+
+Create the PostgreSQL database named `scanner`:
+
+```bash
+# On Mac / Linux:
+createdb scanner || psql -U postgres -c "CREATE DATABASE scanner;"
+
+# Optional: Run schema script manually (the server will also auto-bootstrap tables on boot)
+psql -d scanner -f app/persistence/schema.sql
+```
+
+---
+
+### 4. Python Environment & Dependencies
+
+```bash
+# Create Python virtual environment
 python3 -m venv .venv
+
+# Activate virtual environment
 source .venv/bin/activate    # On Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### Step 3: Node.js Dependencies
+---
 
-Install dependencies for both frontend and backend services:
+### 5. Node.js & React Dependencies
 
 ```bash
-# Express API Backend
+# Backend dependencies
 cd server
 npm install
 cd ..
 
-# React Frontend
+# Frontend dependencies & production build
 cd frontend
 npm install
+npm run build
 cd ..
-```
-
-### Step 4: Database Setup
-
-Ensure PostgreSQL is running, then create the database and load schema:
-
-```bash
-# Create database 'scanner'
-createdb scanner
-
-# Run schema initialization
-psql -d scanner -f app/persistence/schema.sql
-```
-
-*(Optional)* Copy `.env.example` to `.env` if you need custom PostgreSQL credentials:
-```bash
-cp .env.example .env
 ```
 
 ---
 
-## 🚀 Running the Application
+### 6. Start the Application
 
-### Option A: One-Click Launcher (macOS / Linux)
+You can launch both services using the launcher script:
 
 ```bash
 chmod +x start_app.sh
 ./start_app.sh
 ```
 
-### Option B: Run Services Manually
+Or start them manually in two terminals:
 
-1. **Start Express API Server (Port 5001):**
-   ```bash
-   cd server
-   node server.js
-   ```
+#### Terminal 1 — Backend API (Port 5001):
+```bash
+cd server
+npm start
+```
+*(The server automatically detects `.venv/bin/python3`, tests the database connection, bootstraps tables, and outputs the extraction summary banner!)*
 
-2. **Start React Frontend (Port 5173):**
-   ```bash
-   cd frontend
-   npm run dev
-   ```
-
-3. Open **`http://localhost:5173`** in your browser.
+#### Terminal 2 — Frontend Dev Server (Port 5173):
+```bash
+cd frontend
+npm run dev
+```
 
 ---
 
-## 🧪 Running Tests
+## 🌐 Multi-Device LAN Access (Same Wi-Fi)
 
-Run the test suite (188 tests):
+Any smartphone, laptop, or tablet on the same local network can access NissiGrid without installing anything:
+
+1. Check your host machine's local IP:
+   - **macOS**: `ipconfig getifaddr en0`
+   - **Linux**: `hostname -I | awk '{print $1}'`
+   - **Windows**: `ipconfig` (Look for IPv4 address)
+2. Open `http://<YOUR_LOCAL_IP>:5173` (Dev) or `http://<YOUR_LOCAL_IP>:5001` (Production / Docker) in any browser.
+
+---
+
+## 🧪 Running Automated Tests
+
+Run the complete 248-test automated verification suite:
 
 ```bash
 source .venv/bin/activate
-pytest tests/
+PYTHONPATH=. pytest -q
 ```
-
-Verify frontend build:
-```bash
-cd frontend && npm run build
-```
-
----
-
-## 🏗️ Architecture & Pipeline Overview
-
-- **Ingestion**: Multi-engine parsing of unstructured PDFs (native & OCR fallback) and Excel files (`.xlsx`, `.xls`, `.csv`).
-- **3-Layer Duplicate Protection**: Cryptographic SHA-256 hash check, header metadata comparison, and fuzzy line-item similarity matching.
-- **Mathematical Verification**: Pinpoint calculation discrepancy detection (`qty * rate = gross`, `subtotal + tax = final`).
-- **Entity Management**: Automatic vendor and customer registered address parsing.
-- **Executive Analytics**: Interactive SVG Donut chart and live document search.
-
----
-
-## 📁 Directory Structure
-
+Expected output:
 ```text
-nissigrid/
-├── app/                              # Python Extraction & Processing Core
-│   ├── api/                          # FastAPI endpoints & routers
-│   ├── classification/               # Document type classification
-│   ├── config/                       # Settings & classification YAML rules
-│   ├── db/                           # SQLite / test database helpers
-│   ├── excel_extraction/             # Excel parsing logic
-│   ├── ingestion/                    # Ingestion handlers
-│   ├── normalization/                # Number, date, currency standardizers
-│   ├── ocr/                          # Tesseract OCR & image conversion
-│   ├── orchestrator/                 # End-to-end extraction pipeline
-│   ├── persistence/                  # PostgreSQL schema, models & DB session
-│   ├── preprocessing/                # Image binarization, deskewing
-│   ├── quotation_extraction/         # Hybrid PDF/Excel extraction & loader
-│   ├── schema_mapping/               # Schema field transformers
-│   ├── table_detection/              # Table boundary detection
-│   └── validation/                   # Data validation models & rules
-├── frontend/                         # React 18 + Vite SPA Single Page Application
-├── server/                           # Express.js REST API Server (Port 5001)
-├── tests/                            # Unit & integration test suite (188 tests)
-├── input_files/                      # Sample documents for testing & ingestion
-├── start_app.sh                      # One-click system launcher script
-├── .env.example                      # Configuration template
-├── HANDOVER_DOCUMENTATION.md         # Comprehensive Architectural Master Document
-├── requirements.txt                  # Python dependencies
-└── README.md                         # Project documentation
+248 passed in ~100s
 ```
+
+---
+
+## 🏗️ Architectural Core Features
+
+- **Multi-Line Table Unrolling**: Decomposes multi-line table cells (even without horizontal gridlines) into itemized line items.
+- **Header & Address Extraction**: Automatically extracts vendor and customer names, GSTINs, invoice numbers, and physical registered addresses.
+- **Row & Grand Total Reconciliation**: Recalculates `Qty × Rate = Gross`, discounts, tax percentages, and validates against printed grand totals.
+- **3-Layer Duplicate Protection**: Cryptographic SHA-256 hash check, metadata comparison, and fuzzy line-item similarity matching.
+- **Active Learning**: Learns vendor catalog items and description patterns dynamically.
+- **Secret Dark/Light Theme**: Toggle anytime in the browser with `Shift + D`.
+
