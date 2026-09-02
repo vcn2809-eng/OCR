@@ -58,8 +58,10 @@ def extract_header_from_text(text: str) -> Dict[str, Any]:
     header_data: Dict[str, Any] = {
         "vendor_name": None,
         "vendor_gstin": None,
+        "vendor_address": None,
         "customer_name": None,
         "customer_gstin": None,
+        "customer_address": None,
         "quotation_no": None,
         "quotation_date": None,
         "validity_date": None,
@@ -95,13 +97,26 @@ def extract_header_from_text(text: str) -> Dict[str, Any]:
     if curr_match:
         header_data["currency"] = curr_match.group(1).upper().strip()
 
-    # Patient / Customer / Buyer Name
-    patient_match = re.search(r"(?i)(?:Buyer\s*\(Bill\s*to\)|Received\s*From\s*\/\s*Client|Details\s*of\s*Service\s*Recipient|Patient\s*Name|Patient|Customer\s*Name|Customer|Client|Bill\s*To|Client\'s\s*details.*?TO)\s*[:\n\s]*([A-Za-z0-9\s\.\&\-]+?)(?:\s+Jnana|\s+Primary|\s+Date|\s+Industrial|\s+Dilkusha|\s+XYZ\s+Road|\n\n|\n[A-Z][a-z]+\:|$)", text)
+    # Patient / Customer / Buyer Name & Address
+    patient_match = re.search(r"(?i)(?:Buyer\s*\(Bill\s*to\)|Received\s*From\s*\/\s*Client|Details\s*of\s*Service\s*Recipient|Patient\s*Name|Patient|Customer\s*Name|Customer|Client|Bill\s*To|Client\'s\s*details.*?TO)\s*[:\n\s]*([^\n\r]+(?:\n[^\n\r]+){1,5})", text)
     if patient_match:
-        raw_cname = patient_match.group(1).strip().split("\n")[0].strip()
-        clean_cname = re.sub(r"^(?i)(?:Buyer\s*\(Bill\s*to\)|Buyer|Bill\s*To|Customer|Client|Patient\s*Name)\s*[:\s]*", "", raw_cname).strip()
-        header_data["customer_name"] = re.sub(r"(?i)\s*(?:D\.C\s*No|Customer\s*Ref|Buyer\'?s\s*Order).*$", "", clean_cname).strip()
+        raw_block = patient_match.group(1).strip()
+        lines = [l.strip() for l in raw_block.split("\n") if l.strip()]
+        if lines:
+            raw_cname = lines[0]
+            clean_cname = re.sub(r"(?i)^(?:Buyer\s*\(Bill\s*to\)|Buyer|Bill\s*To|Customer|Client|Patient\s*Name)\s*[:\s]*", "", raw_cname).strip()
+            header_data["customer_name"] = re.sub(r"(?i)\s*(?:D\.C\s*No|Customer\s*Ref|Buyer\'?s\s*Order).*$", "", clean_cname).strip()
 
+
+            c_addr_lines = []
+            for l in lines[1:]:
+                if any(k in l for k in ['S.No', 'Products Description', 'Description', 'HSN', 'GST', 'Rate', 'Qty', 'Amount', 'Invoice No', 'Date:']):
+                    break
+                clean_l = re.sub(r"(?i)\s*(?:Customer\s*Ref|D\.C\s*No|Buyer\'?s\s*Order|GST\s*NO).*$", "", l).strip().rstrip(',')
+                if clean_l and not clean_l.startswith(('GST', 'Mob:', 'Email:', 'Date:', 'Invoice', 'Buyer')):
+                    c_addr_lines.append(clean_l)
+            if c_addr_lines:
+                header_data["customer_address"] = ", ".join(c_addr_lines)
 
     # Top Vendor Match from header or Supplier section
     sup_m = re.search(r"(?i)(?:Supplier|From)\s*[:\n\s]*([A-Za-z0-9\s\.\&\-]+?\b(?:Ltd|Limited|Pvt|Enterprises|Services|Logistics|Point|Diagnostic|Stationery|Service|Billing|Valley|Support|Scientific|Chemicals|Pharma|Lab)\b)", text)
@@ -116,6 +131,20 @@ def extract_header_from_text(text: str) -> Dict[str, Any]:
             if any(k in l_clean.upper() for k in ["SCIENTIFIC", "CHEMICALS", "PHARMA", "LAB", "LTD", "LIMITED", "SERVICES", "SERVICE", "LOGISTICS", "DIAGNOSTIC", "STATIONERY", "ENTERPRISES", "COMMUNICATIONS", "WATER SERVICE", "SUPPORT BD", "FOOD VALLEY", "BILLING"]):
                 header_data["vendor_name"] = l_clean
                 break
+
+    # Vendor Address from top header
+    if not header_data["vendor_address"]:
+        top_lines = [l.strip() for l in text.split('\n')[:15] if l.strip() and l.strip().upper() != 'QUOTATION']
+        v_lines = []
+        for l in top_lines:
+            if any(k in l.lower() for k in ['buyer', 'bill to', 'patient', 'customer', 'dc no', 'd.c no']):
+                break
+            clean_l = re.sub(r'(?i)\s*(?:Mob\s*:|Email\s*:|GST\s*NO\s*:|Date\s*:|Invoice\s*No|Buyer\'?s\s*Order).*$', '', l).strip().rstrip(',')
+            if any(k in clean_l.lower() for k in ['#', 'shop', 'floor', 'near', 'temple', 'post', 'road', 'street', 'nagar', 'cross', 'layout', 'bangalore', 'bengaluru', 'mumbai', 'delhi', 'chennai', '560', '500']) and not clean_l.startswith(('Buyer', 'Date:', 'Invoice:', 'GST', 'Mob:', 'Email:')):
+                if not any(k in clean_l.lower() for k in ['east point', 'jnana prabha', 'college', 'hospital']):
+                    v_lines.append(clean_l)
+        if v_lines:
+            header_data["vendor_address"] = ", ".join(v_lines)
 
 
     # Vendor (Seller) and Customer (Client)
@@ -164,8 +193,9 @@ def extract_header_from_text(text: str) -> Dict[str, Any]:
         if v_m:
             v_name = v_m.group(1).strip()
             if v_name.upper().startswith(('M/S.', 'M/S')):
-                v_name = re.sub(r'^(?i)M/s[\.\s]*', '', v_name).strip()
+                v_name = re.sub(r'(?i)^M/s[\.\s]*', '', v_name).strip()
             header_data["vendor_name"] = v_name
+
 
     # 2. Commercial Buyer / Customer Match (e.g. Buyer\nMs Helios Construction LLP)
     if not header_data["customer_name"]:
@@ -206,6 +236,12 @@ def extract_header_fields(first_page_table: List[List[Any]], first_page_text: st
                 header_data["vendor_name"] = line
                 break
 
+    v_lines = [l.strip() for l in vendor_block.split("\n") if l.strip()]
+    if len(v_lines) > 1 and not header_data["vendor_address"]:
+        v_addr_parts = [l for l in v_lines[1:] if not l.startswith(('GST', 'Phone', 'Tel', 'Email', 'Mob'))]
+        if v_addr_parts:
+            header_data["vendor_address"] = ", ".join(v_addr_parts)
+
     gst_match = re.search(r"GSTNo\.\s*:\s*([A-Z0-9]+)", vendor_block)
     if gst_match:
         header_data["vendor_gstin"] = gst_match.group(1).strip()
@@ -231,6 +267,11 @@ def extract_header_fields(first_page_table: List[List[Any]], first_page_text: st
 
         if name_candidates:
             header_data["customer_name"] = name_candidates[0]
+
+        if not header_data["customer_address"] and len(cust_lines) > 2:
+            c_addr_parts = [l for l in cust_lines[1:] if not any(k in l for k in ['To ,', 'GST', 'Kind Attention', 'Department', 'Enq.', 'Email'])]
+            if c_addr_parts:
+                header_data["customer_address"] = ", ".join(c_addr_parts)
 
         for line in cust_lines:
             if "Enq. Ref.No" in line or "Enq. Ref" in line:
@@ -259,6 +300,7 @@ def extract_header_fields(first_page_table: List[List[Any]], first_page_text: st
         header_data["quotation_date"] = header_data["enquiry_date"]
 
     return header_data
+
 
 
 def extract_grand_totals(all_page_tables: List[List[List[Any]]], full_doc_text: str = "") -> Dict[str, Any]:
@@ -731,10 +773,24 @@ def process_text_pdf(pdf_path: Path) -> List[Tuple[Dict[str, Any], List[Dict[str
 
         for idx, page in enumerate(pdf.pages):
             text = page.extract_text() or ""
-            quote_no_m = re.search(r"(?i)(?:Invoice\s*No\.|Invoice\s*No|Invoice\s*Number|Quotation\s*No\.|Quotation\s*No|Quotation\.\s*No)\s*[:\s#\-\.]*([A-Za-z0-9\-\/]{3,35})", text)
-            page_quote_no = quote_no_m.group(1).strip() if quote_no_m else None
+            tables = page.extract_tables() or []
+            first_table = tables[0] if tables else []
 
-            is_aic_start = "AIC ENTERPRISES" in text and idx > 0 and "Quotation. No." in text
+            page_quote_no = None
+            if len(first_table) >= 2 and len(first_table[1]) > 11:
+                q_block = str(first_table[1][11] or '')
+                for l in q_block.split('\n'):
+                    if 'Quotation' in l or 'Quota' in l:
+                        m = re.search(r'[\:\#]\s*([A-Za-z0-9\-\/]+)', l)
+                        if m:
+                            page_quote_no = m.group(1).strip()
+
+            if not page_quote_no:
+                quote_no_m = re.search(r"(?i)(?:Invoice\s*No\.|Invoice\s*No|Invoice\s*Number|Quotation\s*No\.|Quotation\s*No|Quotation\.\s*No)\s*[:\s#\-\.]*([A-Za-z0-9\-\/]{3,35})", text)
+                if quote_no_m:
+                    page_quote_no = quote_no_m.group(1).strip()
+
+            is_aic_start = ("AIC ENTERPRISES" in text or "AIC" in text) and "QUOTATION" in text and idx > 0 and len(first_table) >= 2
             is_new_quote = (page_quote_no and last_quote_no and page_quote_no != last_quote_no)
 
             if idx > 0 and current_group and (is_aic_start or is_new_quote):
@@ -748,6 +804,7 @@ def process_text_pdf(pdf_path: Path) -> List[Tuple[Dict[str, Any], List[Dict[str
 
         if current_group:
             quotation_groups.append(current_group)
+
 
         for group in quotation_groups:
             first_page_idx = group[0]

@@ -89,12 +89,11 @@ def test_validate_quotation_totals():
 
 
 def test_pdf_extraction_real_file():
-    sample_pdf_path = Path("./input_files/d92c764f-3b4f-463d-b131-d2071fa5d2cc_AIC ENTERP Price list.pdf")
-    if not sample_pdf_path.exists():
-        sample_pdf_path = Path("./bill_image/AIC ENTERP Price list.pdf")
-    
-    if not sample_pdf_path.exists():
+    aic_files = list(Path("./input_files").glob("*AIC ENTERP Price list.pdf*")) + list(Path("./bill_image").glob("*AIC ENTERP Price list.pdf*"))
+    if not aic_files:
         pytest.skip("Sample PDF not found in workspace")
+    sample_pdf_path = aic_files[0]
+
 
     results = extract_pdf_quotation(sample_pdf_path)
     assert len(results) == 3
