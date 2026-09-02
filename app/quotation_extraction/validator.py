@@ -119,12 +119,21 @@ def validate_quotation_totals(quotation: Dict[str, Any], items: List[Dict[str, A
             quotation["grand_total_taxable"] = sum_taxable
             grand_taxable = sum_taxable
 
+    if grand_cgst == Decimal("0.00") and sum_cgst > Decimal("0.00"):
+        quotation["grand_total_cgst"] = sum_cgst
+        grand_cgst = sum_cgst
+
+    if grand_sgst == Decimal("0.00") and sum_sgst > Decimal("0.00"):
+        quotation["grand_total_sgst"] = sum_sgst
+        grand_sgst = sum_sgst
+
     expected_final = (sum_taxable + grand_cgst + grand_sgst - discount) if sum_taxable > Decimal("0.00") else sum_final
     if expected_final > Decimal("0.00"):
         if grand_final == Decimal("0.00") or (grand_final > expected_final * Decimal("2.5")):
             logger.warning(f"Header grand_total_final ({grand_final}) severely mismatched expected final ({expected_final}). Auto-correcting to {expected_final}.")
             quotation["grand_total_final"] = expected_final
             grand_final = expected_final
+
 
 
     status = "ok"
