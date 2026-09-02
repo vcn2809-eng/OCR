@@ -2,12 +2,36 @@ const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const { Pool } = require('pg');
-const { exec } = require('child_process');
+const { exec, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
+
+// ── Portable Python Binary Resolver ─────────────────────────────────────────
+// Priority: PYTHON_BIN env var → .venv/bin/python → python3 → python
+function resolvePython() {
+  if (process.env.PYTHON_BIN) return process.env.PYTHON_BIN;
+  const projectRoot = path.join(__dirname, '..');
+  const candidates = [
+    path.join(projectRoot, '.venv', 'bin', 'python3'),
+    path.join(projectRoot, '.venv', 'bin', 'python'),
+    path.join(projectRoot, 'venv', 'bin', 'python3'),
+    path.join(projectRoot, 'venv', 'bin', 'python'),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  // Fall back to system python3 or python
+  try { execSync('python3 --version', { stdio: 'ignore' }); return 'python3'; } catch (_) {}
+  try { execSync('python --version', { stdio: 'ignore' }); return 'python'; } catch (_) {}
+  return 'python3'; // last resort
+}
+const PYTHON_BIN = resolvePython();
+console.log(`🐍 Python binary resolved: ${PYTHON_BIN}`);
+
+
 
 // CORS configuration
 app.use(cors());
@@ -597,9 +621,8 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
 
   const filePath = req.file.path;
   const projectRoot = path.join(__dirname, '..');
-  const pythonBinary = path.join(projectRoot, '.venv', 'bin', 'python');
 
-  const cmd = `"${pythonBinary}" -m app.quotation_extraction.run "${filePath}"`;
+  const cmd = `"${PYTHON_BIN}" -m app.quotation_extraction.run "${filePath}"`;
 
   exec(cmd, { cwd: projectRoot, timeout: 600000, maxBuffer: 50 * 1024 * 1024 }, (error, stdout, stderr) => {
     if (error) {
@@ -644,7 +667,6 @@ app.post('/api/quotations/ingest-text', async (req, res) => {
   }
 
   const projectRoot = path.join(__dirname, '..');
-  const pythonBinary = path.join(projectRoot, '.venv', 'bin', 'python');
   const tempFilePath = path.join(inputDir, `raw_ingest_${Date.now()}.txt`);
 
   try {
@@ -653,7 +675,7 @@ app.post('/api/quotations/ingest-text', async (req, res) => {
     return res.status(500).json({ error: 'Failed to write temporary text file', detail: fsErr.message });
   }
 
-  const cmd = `"${pythonBinary}" -m app.quotation_extraction.text_ingester "${tempFilePath}"`;
+  const cmd = `"${PYTHON_BIN}" -m app.quotation_extraction.text_ingester "${tempFilePath}"`;
 
   exec(cmd, { cwd: projectRoot }, (error, stdout, stderr) => {
     if (fs.existsSync(tempFilePath)) {
@@ -779,10 +801,9 @@ app.patch('/api/line-items/:id', async (req, res) => {
     );
 
     // Trigger background active learning sync so learned memory updates in real-time
-    const { exec } = require('child_process');
-    const pythonPath = path.join(__dirname, '../.venv/bin/python');
-    const syncCmd = `"${pythonPath}" -m app.learning.sync_memory ${docId}`;
-    exec(syncCmd, (syncErr) => {
+    const syncCmd = `"${PYTHON_BIN}" -m app.learning.sync_memory ${docId}`;
+    const projectRoot = path.join(__dirname, '..');
+    exec(syncCmd, { cwd: projectRoot }, (syncErr) => {
       if (syncErr) console.warn('Active learning sync warning:', syncErr.message);
     });
 
