@@ -71,12 +71,18 @@ def extract_header_from_text(text: str) -> Dict[str, Any]:
     if not text:
         return header_data
 
-    # Document / Invoice / Quotation / PO / Guarantor / MRN No
-    doc_no_match = re.search(r"(?i)(?:Invoice\s*Number|Invoice\s*No|Invoice|Quotation|PO|Purchase\s*Order|Doc|Guarantor\s*No|MRN)\s*(?:no|number|\.)?\s*[:\s#\-\.]*\[?\s*([A-Za-z0-9\-\/]{4,25})", text)
+    # Document / Invoice / Quotation / PO / Guarantor / MRN No (Prioritize explicit labeled numbers)
+    doc_no_match = re.search(r"(?i)(?:Invoice\s*No\.|Invoice\s*No|Invoice\s*Number|Quotation\s*No\.|Quotation\s*No|Quotation\s*Number|Bill\s*No|PO\s*No)\s*[:\s#\-\.]*([A-Za-z0-9\-\/]{3,35})", text)
     if doc_no_match:
         val = doc_no_match.group(1).strip()
         if val.upper() not in ("TAX", "FINAL", "PROFORMA", "NUMBER", "NO", "ACCOUNT"):
             header_data["quotation_no"] = val
+    else:
+        doc_no_match_gen = re.search(r"(?i)(?:Invoice|Quotation|PO|Purchase\s*Order|Doc|Guarantor\s*No|MRN)\s*(?:no|number|\.)?\s*[:\s#\-\.]*\[?\s*([A-Za-z0-9\-\/]{4,25})", text)
+        if doc_no_match_gen:
+            val = doc_no_match_gen.group(1).strip()
+            if val.upper() not in ("TAX", "FINAL", "PROFORMA", "NUMBER", "NO", "ACCOUNT", "ROBLIN"):
+                header_data["quotation_no"] = val
 
     # Date of Issue / Invoice Date / Quotation Date / Statement Date / Bill Date
     date_match = re.search(r"(?i)(?:Date\s*of\s*issue|Invoice\s*date|Quotation\s*date|Statement\s*date|PO\s*date|Bill\s*Date|Issue\s*Date|Date)\s*[:\s]*([0-9]{1,2}[\/\-\.][0-9]{1,2}[\/\-\.][0-9]{2,4}|[A-Za-z]+\s+[0-9]{1,2}[,\s]+[0-9]{4}|[0-9]{1,2}\s+[A-Za-z]+[,\s]+[0-9]{4})", text)
@@ -89,24 +95,28 @@ def extract_header_from_text(text: str) -> Dict[str, Any]:
     if curr_match:
         header_data["currency"] = curr_match.group(1).upper().strip()
 
-    # Patient / Customer Name
-    patient_match = re.search(r"(?i)(?:Received\s*From\s*\/\s*Client|Details\s*of\s*Service\s*Recipient|Patient\s*Name|Patient|Customer\s*Name|Customer|Client|Bill\s*To|Client\'s\s*details.*?TO)\s*[:\n\s]*([A-Za-z0-9\s\.\&\-]+?)(?:\s+Primary|\s+Date|\s+Industrial|\s+Dilkusha|\s+Medical|\s+XYZ\s+Road|\n\n|\n[A-Z][a-z]+\:|$)", text)
+    # Patient / Customer / Buyer Name
+    patient_match = re.search(r"(?i)(?:Buyer\s*\(Bill\s*to\)|Received\s*From\s*\/\s*Client|Details\s*of\s*Service\s*Recipient|Patient\s*Name|Patient|Customer\s*Name|Customer|Client|Bill\s*To|Client\'s\s*details.*?TO)\s*[:\n\s]*([A-Za-z0-9\s\.\&\-]+?)(?:\s+Jnana|\s+Primary|\s+Date|\s+Industrial|\s+Dilkusha|\s+XYZ\s+Road|\n\n|\n[A-Z][a-z]+\:|$)", text)
     if patient_match:
-        header_data["customer_name"] = patient_match.group(1).strip().split("\n")[0].strip()
+        raw_cname = patient_match.group(1).strip().split("\n")[0].strip()
+        clean_cname = re.sub(r"^(?i)(?:Buyer\s*\(Bill\s*to\)|Buyer|Bill\s*To|Customer|Client|Patient\s*Name)\s*[:\s]*", "", raw_cname).strip()
+        header_data["customer_name"] = re.sub(r"(?i)\s*(?:D\.C\s*No|Customer\s*Ref|Buyer\'?s\s*Order).*$", "", clean_cname).strip()
+
 
     # Top Vendor Match from header or Supplier section
-    sup_m = re.search(r"(?i)(?:Supplier|From)\s*[:\n\s]*([A-Za-z0-9\s\.\&\-]+?\b(?:Ltd|Limited|Pvt|Enterprises|Services|Logistics|Point|Diagnostic|Stationery|Service|Billing|Valley|Support)\b)", text)
+    sup_m = re.search(r"(?i)(?:Supplier|From)\s*[:\n\s]*([A-Za-z0-9\s\.\&\-]+?\b(?:Ltd|Limited|Pvt|Enterprises|Services|Logistics|Point|Diagnostic|Stationery|Service|Billing|Valley|Support|Scientific|Chemicals|Pharma|Lab)\b)", text)
     if sup_m:
         header_data["vendor_name"] = sup_m.group(1).strip().split("\n")[0].strip()
 
     if not header_data["vendor_name"]:
-        # Match top 3 lines of document for company name
-        lines = [l.strip() for l in text.split("\n")[:5] if l.strip()]
+        # Match top 8 lines of document for company name
+        lines = [l.strip() for l in text.split("\n")[:8] if l.strip() and l.strip().upper() != "QUOTATION"]
         for l in lines:
             l_clean = re.sub(r"^[^\w\d\s]+", "", l).strip()
-            if any(k in l_clean.upper() for k in ["LTD", "LIMITED", "SERVICES", "SERVICE", "LOGISTICS", "DIAGNOSTIC", "STATIONERY", "ENTERPRISES", "COMMUNICATIONS", "WATER SERVICE", "SUPPORT BD", "FOOD VALLEY", "BILLING"]):
+            if any(k in l_clean.upper() for k in ["SCIENTIFIC", "CHEMICALS", "PHARMA", "LAB", "LTD", "LIMITED", "SERVICES", "SERVICE", "LOGISTICS", "DIAGNOSTIC", "STATIONERY", "ENTERPRISES", "COMMUNICATIONS", "WATER SERVICE", "SUPPORT BD", "FOOD VALLEY", "BILLING"]):
                 header_data["vendor_name"] = l_clean
                 break
+
 
     # Vendor (Seller) and Customer (Client)
     if "Seller:" in text and "Client:" in text:
@@ -165,16 +175,17 @@ def extract_header_from_text(text: str) -> Dict[str, Any]:
 
     # 3. GSTIN Regex Extraction
     if not header_data["vendor_gstin"]:
-        v_gst_m = re.search(r'(?i)GSTIN\s*(?:No)?\s*[:\.]?\s*([A-Za-z0-9]{10,16})', text)
+        v_gst_m = re.search(r'(?i)GST\s*(?:NO|IN)?\s*[:\.]?\s*([A-Za-z0-9]{15})', text)
         if v_gst_m:
             header_data["vendor_gstin"] = v_gst_m.group(1).upper()
 
     if not header_data["customer_gstin"]:
-        c_gst_m = re.search(r'(?i)GST\s*(?:No)?\s*[:\.]?\s*([A-Za-z0-9]{10,16})', text)
+        c_gst_m = re.search(r'(?i)(?:Buyer|Customer|Client)\s*GST\s*(?:NO|IN)?\s*[:\.]?\s*([A-Za-z0-9]{15})', text)
         if c_gst_m:
             header_data["customer_gstin"] = c_gst_m.group(1).upper()
 
     return header_data
+
 
 
 def extract_header_fields(first_page_table: List[List[Any]], first_page_text: str = "") -> Dict[str, Any]:
@@ -250,8 +261,8 @@ def extract_header_fields(first_page_table: List[List[Any]], first_page_text: st
     return header_data
 
 
-def extract_grand_totals(all_page_tables: List[List[List[Any]]]) -> Dict[str, Any]:
-    """Extract printed grand total values and words from page tables."""
+def extract_grand_totals(all_page_tables: List[List[List[Any]]], full_doc_text: str = "") -> Dict[str, Any]:
+    """Extract printed grand total values and words from page tables or text layer."""
     totals_data = {
         "grand_total_taxable": Decimal("0.00"),
         "grand_total_cgst": Decimal("0.00"),
@@ -260,44 +271,248 @@ def extract_grand_totals(all_page_tables: List[List[List[Any]]]) -> Dict[str, An
         "grand_total_words": None,
     }
 
-    if not all_page_tables:
-        return totals_data
+    if all_page_tables:
+        for tables in reversed(all_page_tables):
+            for table in tables:
+                for row in table:
+                    if not row or not row[0]:
+                        continue
+                    row_str = " ".join([clean_text_layer(str(c or "")) for c in row])
+                    if "Grand Total" in row_str or "Total" in row_str:
+                        if "Grand Total :" in row_str or "Total Amount" in row_str:
+                            words_m = re.search(r"(?i)(?:Amount\s*in\s*Words|Grand\s*Total\s*:)\s*([^\n\r]+)", row_str)
+                            if words_m:
+                                totals_data["grand_total_words"] = words_m.group(1).strip()
 
-    for tables in reversed(all_page_tables):
-        for table in tables:
-            for row in table:
-                if not row or not row[0]:
-                    continue
-                row_str = " ".join([clean_text_layer(str(c or "")) for c in row])
-                if "Grand Total" in row_str or "Total" in row_str:
-                    if "Grand Total :" in row_str:
-                        words_part = re.sub(r"(?i)Grand Total\s*:\s*(?:INR)?", "", row_str).strip()
-                        totals_data["grand_total_words"] = words_part
+                        numeric_tokens = []
+                        for cell in row:
+                            if cell is not None:
+                                for token in str(cell).split():
+                                    clean_tok = token.replace("INR", "").replace(",", "").strip()
+                                    clean_test = clean_tok.replace("-", "").replace(".", "", 1)
+                                    if clean_test.isdigit():
+                                        try:
+                                            numeric_tokens.append(Decimal(clean_tok))
+                                        except Exception:
+                                            pass
 
-                    numeric_tokens = []
-                    for cell in row:
-                        if cell is not None:
-                            for token in str(cell).split():
-                                clean_tok = token.replace("INR", "").replace(",", "").strip()
-                                clean_test = clean_tok.replace("-", "").replace(".", "", 1)
-                                if clean_test.isdigit():
-                                    try:
-                                        numeric_tokens.append(Decimal(clean_tok))
-                                    except Exception:
-                                        pass
+                        if len(numeric_tokens) == 4:
+                            totals_data["grand_total_taxable"] = numeric_tokens[0]
+                            totals_data["grand_total_cgst"] = numeric_tokens[1]
+                            totals_data["grand_total_sgst"] = numeric_tokens[2]
+                            totals_data["grand_total_final"] = numeric_tokens[3]
+                        elif len(numeric_tokens) == 3:
+                            totals_data["grand_total_taxable"] = numeric_tokens[0]
+                            totals_data["grand_total_cgst"] = numeric_tokens[1] / Decimal("2.0")
+                            totals_data["grand_total_sgst"] = numeric_tokens[1] / Decimal("2.0")
+                            totals_data["grand_total_final"] = numeric_tokens[2]
+                        elif len(numeric_tokens) == 1 and totals_data["grand_total_final"] == Decimal("0.00"):
+                            totals_data["grand_total_final"] = numeric_tokens[0]
 
-                    if len(numeric_tokens) == 4:
-                        totals_data["grand_total_taxable"] = numeric_tokens[0]
-                        totals_data["grand_total_cgst"] = numeric_tokens[1]
-                        totals_data["grand_total_sgst"] = numeric_tokens[2]
-                        totals_data["grand_total_final"] = numeric_tokens[3]
-                    elif len(numeric_tokens) == 3:
-                        totals_data["grand_total_taxable"] = numeric_tokens[0]
-                        totals_data["grand_total_cgst"] = numeric_tokens[1] / Decimal("2.0")
-                        totals_data["grand_total_sgst"] = numeric_tokens[1] / Decimal("2.0")
-                        totals_data["grand_total_final"] = numeric_tokens[2]
+    # Text layer regex fallback for grand totals
+    if full_doc_text:
+        tot_amt_m = re.search(r"(?i)(?:Total\s*Amount|Grand\s*Total|Net\s*Total|Final\s*Amount)\s*[:\s]*[\$₹]?\s*([\d\s\,]+\.\d{2})", full_doc_text)
+        if tot_amt_m:
+            totals_data["grand_total_final"] = to_decimal(tot_amt_m.group(1))
+
+        tot_tax_m = re.search(r"(?i)(?:Total\s*Taxable|Taxable\s*Amount|Sub\s*Total|Subtotal)\s*[:\s]*[\$₹]?\s*([\d\s\,]+\.\d{2})", full_doc_text)
+        if not tot_tax_m:
+            tot_tax_m = re.search(r"([\d\,]+\.\d{2})\s*\n\s*Total\s*GST", full_doc_text, re.IGNORECASE)
+        if tot_tax_m:
+            totals_data["grand_total_taxable"] = to_decimal(tot_tax_m.group(1))
+
+        tot_gst_m = re.search(r"(?i)(?:Total\s*GST|GST\s*Amount|Total\s*Tax)\s*[:\s]*[\$₹]?\s*([\d\s\,]+\.\d{2})", full_doc_text)
+        if tot_gst_m:
+            gst_val = to_decimal(tot_gst_m.group(1))
+            totals_data["grand_total_cgst"] = gst_val / Decimal("2.0")
+            totals_data["grand_total_sgst"] = gst_val / Decimal("2.0")
+
+        words_m = re.search(r"(?i)Amount\s*in\s*Words\s*:\s*([^\n\r]+)", full_doc_text)
+        if words_m:
+            totals_data["grand_total_words"] = words_m.group(1).strip()
+
 
     return totals_data
+
+
+def unroll_multiline_table_rows(table: List[List[Any]]) -> List[Dict[str, Any]]:
+    """Unroll tables where each column has multi-line text grouped into a single cell."""
+    items = []
+    if not table or len(table) < 2:
+        return items
+
+    for row in table:
+        if not row or not row[0]:
+            continue
+        s_no_cell = str(row[0]).strip()
+        s_lines = [l.strip() for l in s_no_cell.split('\n') if l.strip()]
+
+        if len(s_lines) > 1 and any(l.isdigit() for l in s_lines):
+            col_lines = []
+            for cell in row:
+                if cell is None:
+                    col_lines.append([])
+                else:
+                    col_lines.append([l.strip() for l in str(cell).split('\n') if l.strip()])
+
+            s_nos = [int(s) for s in s_lines if s.isdigit()]
+            num_items = len(s_nos)
+            if num_items == 0:
+                continue
+
+            desc_col_idx = 1
+            gst_col_idx = None
+            rate_col_idx = None
+            qty_col_idx = None
+            amt_col_idx = None
+
+            for c_idx, cl in enumerate(col_lines):
+                if c_idx == 0:
+                    continue
+                if any('%' in x for x in cl):
+                    gst_col_idx = c_idx
+                elif any(re.match(r'^\d+[\,\.]\d{2}$', x.replace(',', '')) for x in cl):
+                    if rate_col_idx is None:
+                        rate_col_idx = c_idx
+                    else:
+                        amt_col_idx = c_idx
+                elif any(x.isdigit() for x in cl) and len(cl) == num_items:
+                    qty_col_idx = c_idx
+
+            if amt_col_idx is None and len(col_lines) > 0:
+                amt_col_idx = len(col_lines) - 1
+
+            raw_desc_lines = col_lines[desc_col_idx] if desc_col_idx < len(col_lines) else []
+            rates = col_lines[rate_col_idx] if rate_col_idx and rate_col_idx < len(col_lines) else []
+            qtys = col_lines[qty_col_idx] if qty_col_idx and qty_col_idx < len(col_lines) else []
+            amts = col_lines[amt_col_idx] if amt_col_idx and amt_col_idx < len(col_lines) else []
+            gsts = col_lines[gst_col_idx] if gst_col_idx and gst_col_idx < len(col_lines) else []
+
+            descs = []
+            if len(raw_desc_lines) == num_items:
+                descs = raw_desc_lines
+            else:
+                curr_desc = ''
+                for dl in raw_desc_lines:
+                    if not curr_desc:
+                        curr_desc = dl
+                    else:
+                        if len(descs) + (len(raw_desc_lines) - raw_desc_lines.index(dl)) == num_items:
+                            descs.append(curr_desc)
+                            curr_desc = dl
+                        elif re.match(r'^(?:\d+gm|\d+ml|\d+ltr|\d+\%|min|assay|\,)', dl, re.IGNORECASE) or dl[0].islower():
+                            curr_desc += ' ' + dl
+                        else:
+                            descs.append(curr_desc)
+                            curr_desc = dl
+                if curr_desc:
+                    descs.append(curr_desc)
+
+            for idx in range(num_items):
+                s = s_nos[idx]
+                d = descs[idx] if idx < len(descs) else ''
+                g_str = gsts[idx] if idx < len(gsts) else '0'
+                r_str = rates[idx] if idx < len(rates) else '0.00'
+                q_str = qtys[idx] if idx < len(qtys) else '1.00'
+                a_str = amts[idx] if idx < len(amts) else '0.00'
+
+                q_val = to_decimal(q_str)
+                r_val = to_decimal(r_str)
+                a_val = to_decimal(a_str)
+                g_val = to_decimal(g_str.replace('%', ''))
+
+                if a_val == Decimal('0.00') and r_val > 0 and q_val > 0:
+                    a_val = r_val * q_val
+                if r_val == Decimal('0.00') and a_val > 0 and q_val > 0:
+                    r_val = a_val / q_val
+
+                tax_amt = (a_val * g_val) / Decimal('100.00')
+                half_tax = tax_amt / Decimal('2.00')
+                half_pct = g_val / Decimal('2.00')
+
+                d_clean = re.sub(r'(?i)\n?\s*(?:total\s*gst|grand\s*total|total\s*amount).*$', '', d).strip()
+
+                item = {
+                    'line_no': s,
+                    'item_code': f'ITEM-{s}',
+                    'description': d_clean,
+                    'hsn_code': '',
+                    'brand': '',
+                    'uom': 'Nos',
+                    'packing': '',
+                    'qty': q_val,
+                    'rate': r_val,
+                    'gross_amount': a_val,
+                    'discount_pct': Decimal('0.00'),
+                    'discount_amount': Decimal('0.00'),
+                    'taxable_amount': a_val,
+                    'cgst_pct': half_pct,
+                    'cgst_amount': half_tax,
+                    'sgst_pct': half_pct,
+                    'sgst_amount': half_tax,
+                    'final_value': a_val + tax_amt,
+                    'status_eta': 'In Stock',
+                }
+                items.append(validate_row_arithmetic(item))
+
+        elif s_lines and s_lines[0].isdigit():
+            # Standard single row
+            s_num = int(s_lines[0])
+            desc_cell = str(row[1] or '').strip()
+            desc_clean = re.sub(r'(?i)\n?\s*(?:total\s*gst|grand\s*total|total\s*amount).*$', '', desc_cell).strip()
+
+            row_tokens = []
+            for c in row[2:]:
+                if c is not None:
+                    row_tokens.extend(str(c).split())
+
+            g_val = Decimal('0.00')
+            r_val = Decimal('0.00')
+            q_val = Decimal('1.00')
+            a_val = Decimal('0.00')
+
+            for t in row_tokens:
+                if '%' in t:
+                    g_val = to_decimal(t.replace('%', ''))
+                elif re.match(r'^\d+[\,\.]\d{2}$', t.replace(',', '')):
+                    if r_val == Decimal('0.00'):
+                        r_val = to_decimal(t)
+                    else:
+                        a_val = to_decimal(t)
+                elif t.isdigit() and int(t) < 1000 and q_val == Decimal('1.00') and r_val > Decimal('0.00'):
+                    q_val = to_decimal(t)
+
+            if a_val == Decimal('0.00') and r_val > 0 and q_val > 0:
+                a_val = r_val * q_val
+
+            tax_amt = (a_val * g_val) / Decimal('100.00')
+            half_tax = tax_amt / Decimal('2.00')
+            half_pct = g_val / Decimal('2.00')
+
+            item = {
+                'line_no': s_num,
+                'item_code': f'ITEM-{s_num}',
+                'description': desc_clean,
+                'hsn_code': '',
+                'brand': '',
+                'uom': 'Nos',
+                'packing': '',
+                'qty': q_val,
+                'rate': r_val,
+                'gross_amount': a_val,
+                'discount_pct': Decimal('0.00'),
+                'discount_amount': Decimal('0.00'),
+                'taxable_amount': a_val,
+                'cgst_pct': half_pct,
+                'cgst_amount': half_tax,
+                'sgst_pct': half_pct,
+                'sgst_amount': half_tax,
+                'final_value': a_val + tax_amt,
+                'status_eta': 'In Stock',
+            }
+            items.append(validate_row_arithmetic(item))
+
+    return items
 
 
 def parse_generic_table_row(row: List[Any], headers: List[str]) -> Optional[Dict[str, Any]]:
@@ -509,17 +724,28 @@ def process_text_pdf(pdf_path: Path) -> List[Tuple[Dict[str, Any], List[Dict[str
         if num_pages == 0:
             return []
 
-        # Group pages by quotation (or default to 1 group for non-AIC PDFs)
+        # Group pages by quotation: only split when a NEW distinct quotation number or AIC header is detected
         quotation_groups: List[List[int]] = []
         current_group: List[int] = []
+        last_quote_no = None
 
         for idx, page in enumerate(pdf.pages):
             text = page.extract_text() or ""
-            if "QUOTATION" in text and idx > 0:
-                if current_group:
-                    quotation_groups.append(current_group)
-                    current_group = []
+            quote_no_m = re.search(r"(?i)(?:Invoice\s*No\.|Invoice\s*No|Invoice\s*Number|Quotation\s*No\.|Quotation\s*No|Quotation\.\s*No)\s*[:\s#\-\.]*([A-Za-z0-9\-\/]{3,35})", text)
+            page_quote_no = quote_no_m.group(1).strip() if quote_no_m else None
+
+            is_aic_start = "AIC ENTERPRISES" in text and idx > 0 and "Quotation. No." in text
+            is_new_quote = (page_quote_no and last_quote_no and page_quote_no != last_quote_no)
+
+            if idx > 0 and current_group and (is_aic_start or is_new_quote):
+                quotation_groups.append(current_group)
+                current_group = []
+
+            if page_quote_no:
+                last_quote_no = page_quote_no
+
             current_group.append(idx)
+
         if current_group:
             quotation_groups.append(current_group)
 
@@ -532,8 +758,10 @@ def process_text_pdf(pdf_path: Path) -> List[Tuple[Dict[str, Any], List[Dict[str
             
             header_data = extract_header_fields(first_page_table, first_page_text)
 
+            # Gather all group text and tables for grand totals
+            all_group_text = "\n".join([pdf.pages[i].extract_text() or "" for i in group])
             all_group_tables = [pdf.pages[i].extract_tables() for i in group if pdf.pages[i].extract_tables()]
-            totals_data = extract_grand_totals(all_group_tables)
+            totals_data = extract_grand_totals(all_group_tables, all_group_text)
 
             from app.quotation_extraction.classifier import classify_document_text
             doc_type, confidence, reasoning = classify_document_text(first_page_text)
@@ -560,7 +788,13 @@ def process_text_pdf(pdf_path: Path) -> List[Tuple[Dict[str, Any], List[Dict[str
                     if not table or len(table) < 1:
                         continue
 
-                    # Check if table has a generic header row with items/description/qty
+                    # 1. Try multi-line unroller first if table has collapsed multi-line cells
+                    unrolled_items = unroll_multiline_table_rows(table)
+                    if unrolled_items:
+                        line_items.extend(unrolled_items)
+                        continue
+
+                    # 2. Check if table has a generic header row with items/description/qty
                     header_row_idx = -1
                     is_generic_items_table = False
                     for r_idx, row in enumerate(table):
@@ -614,6 +848,7 @@ def process_text_pdf(pdf_path: Path) -> List[Tuple[Dict[str, Any], List[Dict[str
             quotations_list.append((quotation_dict, line_items))
 
     return quotations_list
+
 
 
 def normalize_and_extract_item_code(raw_code: str, raw_desc: str) -> Tuple[str, str]:
