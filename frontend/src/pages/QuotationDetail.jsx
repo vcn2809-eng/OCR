@@ -157,18 +157,29 @@ export default function QuotationDetail() {
   const isMedical = docType.includes('medical') || docType.includes('statement') || (quotation.source_file && quotation.source_file.includes('hospital')) || (quotation.source_file && quotation.source_file.includes('med_doc'))
   const isPO = docType.includes('purchase') || docType.includes('po')
 
-  // Calculate live client-side sums & adjustments reconciliation
-  const sumOfTaxable = lineItems.reduce((acc, item) => {
+  // Filter out OCR-captured summary/total rows (e.g. "Total Amount : 9,975", "Grand Total", "Sub Total")
+  // These are not real line items — they are footer summary rows that double-count the total.
+  const SUMMARY_ROW_PATTERN = /^(grand\s*total|sub[\s-]?total|total\s*amount|net\s*total|net\s*amount|balance\s*due|amount\s*due|total\s*due|invoice\s*total)/i
+  const realLineItems = lineItems.filter(item => {
+    const desc = String(item.description || '').trim()
+    const code = String(item.item_code || '').trim()
+    // If description matches a summary pattern and item_code is blank/generic, treat as summary row
+    if (SUMMARY_ROW_PATTERN.test(desc) && (!code || /^item-?\d+$/i.test(code))) return false
+    return true
+  })
+
+  // Calculate live client-side sums & adjustments reconciliation (using real line items only)
+  const sumOfTaxable = realLineItems.reduce((acc, item) => {
     const val = parseFloat(String(item.taxable_amount || item.gross_amount || '0').replace(/,/g, '')) || 0
     return acc + val
   }, 0)
 
-  const sumOfLineDiscounts = lineItems.reduce((acc, item) => {
+  const sumOfLineDiscounts = realLineItems.reduce((acc, item) => {
     const val = parseFloat(String(item.discount_amount || '0').replace(/,/g, '')) || 0
     return acc + val
   }, 0)
 
-  const sumOfFinal = lineItems.reduce((acc, item) => {
+  const sumOfFinal = realLineItems.reduce((acc, item) => {
     const val = parseFloat(String(item.final_value || item.gross_amount || '0').replace(/,/g, '')) || 0
     return acc + val
   }, 0)
@@ -187,15 +198,22 @@ export default function QuotationDetail() {
   const rawDiffDiscount = (billedCharges > netDue) ? (billedCharges - netDue) : 0;
   const totalDiscounts = sumOfLineDiscounts > 0 ? sumOfLineDiscounts : rawDiffDiscount;
 
-  // Mathematical Reconciliation Check (Requirement 3):
-  // Check if computed line-item sum matches printed subtotal (if present) and grand total within tolerance.
-  const isSubtotalReconciled = expectedTaxable > 0 ? Math.abs(sumOfFinal - expectedTaxable) <= 2.0 : true;
+  // Mathematical Reconciliation Check:
+  // isFinalReconciled: does the line-item sum match the printed grand total?
   const isFinalReconciled = expectedFinal > 0 ? (
     Math.abs(sumOfFinal - expectedFinal) <= 2.0 || 
     Math.abs((sumOfFinal - sumOfLineDiscounts) - expectedFinal) <= 2.0 ||
     Math.abs((sumOfFinal - rawDiffDiscount) - expectedFinal) <= 2.0
   ) : true;
+
+  // isSubtotalReconciled: only flag a subtotal mismatch if the grand total itself doesn't already reconcile.
+  // Many invoices print a pre-tax subtotal + tax-inclusive grand total, so subtotal < sumOfFinal is expected.
+  const isSubtotalReconciled = expectedTaxable > 0
+    ? (Math.abs(sumOfFinal - expectedTaxable) <= 2.0 || isFinalReconciled)
+    : true;
+
   const isFullyReconciled = isSubtotalReconciled && isFinalReconciled;
+
 
   const justUploaded = location.state?.justUploaded
   const uploadStatus = location.state?.status

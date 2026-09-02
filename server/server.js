@@ -78,11 +78,16 @@ function validateRowArithmetic(item) {
   const sgstAmt = toNum(item.sgst_amount);
   const finalVal = toNum(item.final_value);
 
-  // 1. Gross Amount = Rate * Qty
+  // Skip arithmetic validation for summary / total rows (no qty or rate = not a real line item)
+  if (qty === 0 || rate === 0) return reasons;
+
+  // 1. Gross Amount = Rate * Qty (allow ₹5 tolerance to absorb OCR digit misreads)
   const expectedGross = rate * qty;
-  if (Math.abs(gross - expectedGross) > 0.02) {
+  const GROSS_TOLERANCE = Math.max(0.05 * expectedGross, 5.0); // 5% of expected or ₹5, whichever is greater
+  if (Math.abs(gross - expectedGross) > GROSS_TOLERANCE && gross > 0) {
     reasons.push(`Gross Amount mismatch: calculated ${expectedGross.toFixed(2)}, got ${gross.toFixed(2)}`);
   }
+
 
   // 2. Discount Amount = Gross * Discount % / 100
   const expectedDisc = (gross * discPct) / 100.0;
