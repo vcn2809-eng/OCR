@@ -12,45 +12,84 @@ from app.quotation_extraction.exceptions import QuotationParsingError
 
 logger = logging.getLogger(__name__)
 
-HEADER_PATTERNS = {
-    "line_no": ["s.no", "sno", "s n", "sn", "line", "sl", "sl.no", "item no", "#"],
-    "item_code": ["code", "item code", "catalog", "part no", "part", "sku", "product code", "hsn"],
-    "description": ["description", "item", "desc", "particulars", "product", "details", "name", "service", "material"],
-    "hsn_code": ["hsn", "hsn code", "sac", "sac code"],
-    "brand": ["brand", "make", "manufacturer"],
-    "uom": ["uom", "unit", "um"],
-    "packing": ["packing", "pack", "pkg"],
-    "qty": ["qty", "quantity", "nos", "units", "count"],
-    "rate": ["rate", "price", "unit price", "net price", "cost"],
-    "gross_amount": ["gross", "gross amount", "gross amt", "amount", "total amount"],
-    "discount_pct": ["disc", "discount", "disc%"],
-    "discount_amount": ["discount amount", "disc amt"],
-    "taxable_amount": ["taxable", "taxable amount", "taxable amt", "subtotal"],
-    "cgst_pct": ["cgst %", "cgst%"],
-    "cgst_amount": ["cgst amount", "cgst amt"],
-    "sgst_pct": ["sgst %", "sgst%"],
-    "sgst_amount": ["sgst amount", "sgst amt"],
-    "final_value": ["final", "final value", "net value", "total", "net total", "grand total"],
-    "status_eta": ["status", "eta", "delivery"]
-}
 
 def match_cell_to_field(cell_val: Any) -> Optional[str]:
+    """Matches any arbitrary header cell string to standard quotation schema fields."""
     if cell_val is None:
         return None
     clean = str(cell_val).strip().lower().replace("\n", " ")
     if not clean:
         return None
-    
-    for field, patterns in HEADER_PATTERNS.items():
-        for pat in patterns:
-            if pat in clean:
-                return field
+
+    # Priority 1: Serial / Line number
+    if re.search(r"(?:sl\.?\s*no|s\.?\s*no|sl\s*#|s#|sl#|sno|sr\.?\s*no|item\s*no|line\s*no|line\s*#|pos|serial\s*no)", clean) or clean in ("#", "sl", "sn", "line"):
+        return "line_no"
+
+    # Priority 2: Codes & Descriptions
+    if re.search(r"(?:inv\s*#|invoice\s*#|invoice\s*no|inv\s*no|bill\s*#|bill\s*no|item\s*code|product\s*code|part\s*no|part\s*#|part\s*number|catalog\s*no|cat\s*no|sku|material\s*code|art\s*no)", clean):
+        return "item_code"
+    if re.search(r"\b(?:hsn|sac)\b", clean):
+        return "hsn_code"
+    if re.search(r"(?:item\s*description|product\s*description|particulars|particular|item\s*name|product\s*name|material\s*description|description|desc|specifications|specification|details|customer|client|vendor|name|title)", clean):
+        return "description"
+    if re.search(r"\b(?:brand|make|manufacturer|mfr)\b", clean):
+        return "brand"
+    if re.search(r"\b(?:uom|unit\s*of\s*measure|unit|pkg\s*unit|units)\b", clean) and not re.search(r"(?:unit\s*price|unit\s*rate|unit\s*cost)", clean):
+        return "uom"
+    if re.search(r"\b(?:pack\s*size|packing|pack|pkg|package)\b", clean):
+        return "packing"
+
+    # Priority 3: Quantity (careful with 'count' vs 'discount')
+    if re.search(r"\b(?:quantity|qty|qnty|nos|count|volume)\b", clean) and not re.search(r"(?:discount|account)", clean):
+        return "qty"
+
+    # Priority 4: Taxes Breakdown (CGST, SGST, IGST, GST)
+    if "cgst" in clean:
+        return "cgst_pct" if re.search(r"[%]|pct|rate", clean) else "cgst_amount"
+    if "sgst" in clean or "utgst" in clean:
+        return "sgst_pct" if re.search(r"[%]|pct|rate", clean) else "sgst_amount"
+    if "igst" in clean:
+        return "igst_pct" if re.search(r"[%]|pct|rate", clean) else "igst_amount"
+    if re.search(r"\b(?:gst\s*%|tax\s*%|vat\s*%|gst\s*rate|tax\s*rate)\b", clean) or clean in ("gst %", "tax %", "vat %", "gst%"):
+        return "gst_pct"
+
+    # Priority 5: After Discount / Taxable Amounts (Check BEFORE discount and tax amount)
+    if re.search(r"(?:after\s*discount|taxable\s*amount|taxable\s*value|taxable\s*amt|total\s*taxable|net\s*taxable|taxable)", clean):
+        return "taxable_amount"
+
+    if re.search(r"\b(?:gst\s*amount|tax\s*amount|vat\s*amount|total\s*gst|total\s*tax)\b", clean) or ("gst" in clean and "amount" in clean):
+        return "gst_amount"
+
+    # Priority 6: Discounts
+    if re.search(r"(?:discount\s*%|disc\s*%|disc%|discount\s*rate|discount\s*pct)", clean) or clean in ("discount %", "disc %", "disc%", "%"):
+        return "discount_pct"
+    if re.search(r"(?:discount\s*amount|disc\s*amount|disc\s*amt|discount\s*value|disc\s*value)", clean) or ("discount" in clean and "amount" in clean):
+        return "discount_amount"
+    if re.search(r"\b(?:discount|disc)\b", clean):
+        return "discount_pct"
+
+    # Priority 7: Prices, Subtotals
+    if re.search(r"(?:selling\s*price|unit\s*selling\s*price|unit\s*price|unit\s*rate|net\s*price|basic\s*rate|basic\s*price|rate/unit|price/unit|rate|price|unit\s*cost|cost|mrp)", clean):
+        return "rate"
+    if re.search(r"(?:sub\s*total|subtotal|gross\s*amount|gross\s*amt|basic\s*amount|basic\s*value|total\s*price|gross\s*value|gross)", clean):
+        return "gross_amount"
+
+    # Priority 8: Final Total / Net Value
+    if re.search(r"(?:a\+b|final\s*value|final\s*amount|final\s*total|net\s*total|grand\s*total|line\s*total|total\s*amount|net\s*value|amount\s*\(?rs\)?\s*a\+b)", clean):
+        return "final_value"
+    if clean in ("total", "amount", "net", "final", "value", "amount (rs.)", "amount (rs)"):
+        return "final_value"
+
+    # Priority 9: Dates & Reference
+    if re.search(r"\b(?:date|dt|invoice\s*date|bill\s*date|order\s*date)\b", clean):
+        return "status_eta"
+
     return None
+
 
 
 def read_csv_file(file_path: Path) -> List[List[Any]]:
     """Read CSV file into a 2D grid."""
-    import sys
     try:
         csv.field_size_limit(10 * 1024 * 1024)
     except Exception:
@@ -67,58 +106,65 @@ def read_csv_file(file_path: Path) -> List[List[Any]]:
     return rows
 
 
-def read_xls_file(file_path: Path) -> List[List[Any]]:
-    """Read legacy .xls file into a 2D grid using xlrd."""
-    rows = []
+def read_xls_file_all_sheets(file_path: Path) -> List[Tuple[str, List[List[Any]]]]:
+    """Read all non-empty sheets from legacy .xls file."""
+    sheets_data = []
     try:
         wb = xlrd.open_workbook(file_path)
-        sheet = wb.sheet_by_index(0)
-        for r_idx in range(sheet.nrows):
-            rows.append([sheet.cell_value(r_idx, c_idx) for c_idx in range(sheet.ncols)])
+        for s_idx in range(wb.nsheets):
+            sheet = wb.sheet_by_index(s_idx)
+            rows = []
+            for r_idx in range(sheet.nrows):
+                rows.append([sheet.cell_value(r_idx, c_idx) for c_idx in range(sheet.ncols)])
+            if any(any(c is not None and str(c).strip() for c in r) for r in rows):
+                sheets_data.append((sheet.name, rows))
     except Exception as e:
         raise QuotationParsingError(f"Failed to read XLS file: {e}")
-    return rows
+    return sheets_data
 
 
-def read_xlsx_file(file_path: Path) -> List[List[Any]]:
-    """Read modern .xlsx file into a 2D grid using openpyxl, selecting the sheet with the most content."""
-    rows = []
+def read_xlsx_file_all_sheets(file_path: Path) -> List[Tuple[str, List[List[Any]]]]:
+    """Read all non-empty sheets from modern .xlsx file."""
+    sheets_data = []
     try:
         wb = openpyxl.load_workbook(file_path, data_only=True)
-        best_sheet = wb.active
-        max_non_empty = 0
         for sheetname in wb.sheetnames:
             s = wb[sheetname]
-            count = sum(1 for row in s.iter_rows(values_only=True) if any(c is not None for c in row))
-            if count > max_non_empty:
-                max_non_empty = count
-                best_sheet = s
-
-        for row in best_sheet.iter_rows(values_only=True):
-            rows.append(list(row))
+            rows = []
+            for row in s.iter_rows(values_only=True):
+                rows.append(list(row))
+            if any(any(c is not None and str(c).strip() for c in r) for r in rows):
+                sheets_data.append((sheetname, rows))
     except Exception as e:
         raise QuotationParsingError(f"Failed to read XLSX file: {e}")
-    return rows
+    return sheets_data
 
 
-def extract_excel_quotation(file_path: Path) -> List[Tuple[Dict[str, Any], List[Dict[str, Any]]]]:
-    """Extract quotation metadata and line items from Excel / CSV sheets."""
-    ext = file_path.suffix.lower()
-    if ext == ".csv":
-        raw_rows = read_csv_file(file_path)
-    elif ext == ".xls":
-        raw_rows = read_xls_file(file_path)
-    elif ext in (".xlsx", ".xlsm"):
-        raw_rows = read_xlsx_file(file_path)
-    else:
-        raise QuotationParsingError(f"Unsupported spreadsheet format: {ext}")
+def is_sub_header_row(row: List[Any]) -> bool:
+    """Detects whether a row contains sub-header labels (% , Amount, UOM, Remarks) vs actual data rows."""
+    for c in row:
+        if c is None:
+            continue
+        c_str = str(c).strip().replace(",", "").replace("$", "").replace("₹", "")
+        try:
+            val = float(c_str)
+            if val > 5:
+                return False
+        except ValueError:
+            pass
+    row_text = " ".join([str(c or "").lower() for c in row])
+    sub_header_keywords = ["%", "amount", "uom", "unit", "price", "remarks", "specification", "specifications", "rate", "a+b", "after discount", "(rs.)"]
+    return any(k in row_text for k in sub_header_keywords)
 
+
+
+def extract_single_sheet_rows(raw_rows: List[List[Any]], file_name: str, sheet_name: Optional[str] = None) -> Optional[Tuple[Dict[str, Any], List[Dict[str, Any]]]]:
+    """Extract metadata and line items from a single 2D grid of spreadsheet rows."""
     if not raw_rows:
-        return []
+        return None
 
-    # Check if any cell contains an embedded JSON quotation payload (e.g. synthetic batch CSVs)
+    # Check if this sheet is an embedded JSON container (e.g. synthetic batch CSVs)
     import json
-    json_results = []
     for r_idx, row in enumerate(raw_rows):
         if not row:
             continue
@@ -162,7 +208,7 @@ def extract_excel_quotation(file_path: Path) -> List[Tuple[Dict[str, Any], List[
                             "grand_total_sgst": to_decimal(summary.get("vat_amount") or summary.get("tax")) / Decimal("2.0"),
                             "grand_total_final": to_decimal(summary.get("gross_worth") or summary.get("grand_total")),
                             "grand_total_words": None,
-                            "source_file": file_path.name,
+                            "source_file": file_name,
                             "document_type": "invoice_final",
                             "document_no": inv_no,
                             "document_date": parse_date(data.get("date_of_issue") or data.get("date")),
@@ -205,23 +251,19 @@ def extract_excel_quotation(file_path: Path) -> List[Tuple[Dict[str, Any], List[
                                 "status_eta": "In Stock"
                             }))
 
-                        json_results.append((q_dict, line_items))
-                    except Exception as e:
-                        logger.warning(f"Failed to parse embedded JSON cell: {e}")
-
-    if json_results:
-        logger.info(f"Extracted {len(json_results)} JSON quotation payload(s) from spreadsheet {file_path.name}")
-        return json_results
+                        return (q_dict, line_items)
+                    except Exception:
+                        pass
 
     # ── Step 1: Scan Top Rows for Document Metadata ────────────────────────────
     top_cells = []
-    for r in raw_rows[:15]:
+    for r in raw_rows[:20]:
         for c in r:
             if c is not None and str(c).strip():
                 top_cells.append(str(c).strip())
     top_text = "\n".join(top_cells)
 
-    quotation_dict = {
+    q_dict = {
         "vendor_name": None,
         "vendor_gstin": None,
         "vendor_address": None,
@@ -240,63 +282,79 @@ def extract_excel_quotation(file_path: Path) -> List[Tuple[Dict[str, Any], List[
         "grand_total_sgst": Decimal("0.00"),
         "grand_total_final": Decimal("0.00"),
         "grand_total_words": None,
-        "source_file": file_path.name,
+        "source_file": f"{file_name} [{sheet_name}]" if sheet_name and sheet_name != "." else file_name,
     }
 
     # GSTIN
     gst_m = re.search(r"(?i)GST(?:IN)?\s*[\:\;\=\s]*([A-Za-z0-9]{15})", top_text)
     if gst_m:
-        quotation_dict["vendor_gstin"] = gst_m.group(1).upper()
+        q_dict["vendor_gstin"] = gst_m.group(1).upper()
 
-    # Quotation / Invoice No & Date
-    q_m = re.search(r"(?i)(?:Qt\s*No|Quotation\s*No|Invoice\s*No|Doc\s*No)\s*[\:\;\#\=\s]*([A-Za-z0-9\-\/]+)", top_text)
+    # Quotation / Invoice / PO / Doc No & Date
+    q_m = re.search(r"(?i)(?:Qt\s*No|Quotation\s*No|Invoice\s*No|Doc\s*No|Quote\s*#|Inv\s*#|PO\s*No)\s*[\:\;\#\=\s]*([A-Za-z0-9\-\/]+)", top_text)
     if q_m:
-        quotation_dict["quotation_no"] = q_m.group(1).strip()
+        q_dict["quotation_no"] = q_m.group(1).strip()
 
-    d_m = re.search(r"(?i)Date\s*[\:\;\=\s]*([0-9]{1,2}[\.\/\-][0-9]{1,2}[\.\/\-][0-9]{2,4})", top_text)
+    d_m = re.search(r"(?i)(?:Date|Dt)\s*[\:\;\=\s]*([0-9]{1,2}[\.\/\-][0-9]{1,2}[\.\/\-][0-9]{2,4})", top_text)
     if d_m:
-        quotation_dict["quotation_date"] = parse_date(d_m.group(1).strip())
+        q_dict["quotation_date"] = parse_date(d_m.group(1).strip())
 
     # Vendor Name & Address
     for cell_str in top_cells:
-        if any(k in cell_str.upper() for k in ["SCIENTIFIC", "CHEMICALS", "PHARMA", "ENTERPRISES", "SERVICES", "PVT", "LTD", "INDUSTRIES", "LAB"]):
-            if not quotation_dict["vendor_name"] and not cell_str.startswith(("DEALERS", "EAST POINT", "TO", "GSTIN", "QUOTATION")):
-                quotation_dict["vendor_name"] = cell_str.split("\n")[0].strip()
+        if any(k in cell_str.upper() for k in ["SCIENTIFIC", "CHEMICALS", "PHARMA", "ENTERPRISES", "SERVICES", "PVT", "LTD", "INDUSTRIES", "LAB", "SOLUTIONS", "SUPPLIER", "DISTRIBUTORS"]):
+            if not q_dict["vendor_name"] and not cell_str.startswith(("DEALERS", "EAST POINT", "TO", "GSTIN", "QUOTATION")):
+                v_cand = cell_str.split("\n")[0].strip()
+                v_cand = re.sub(r"(?i)^(?:Supplier|From|Vendor)\s*[\:\s]*", "", v_cand).strip()
+                q_dict["vendor_name"] = v_cand
         if "DEALERS IN" in cell_str or "#" in cell_str:
-            if not quotation_dict["vendor_address"]:
-                quotation_dict["vendor_address"] = cell_str.replace("\n", ", ").strip()
+            if not q_dict["vendor_address"]:
+                q_dict["vendor_address"] = cell_str.replace("\n", ", ").strip()
 
     # Customer Name & Address
     for cell_str in top_cells:
-        if any(k in cell_str.upper() for k in ["COLLEGE", "HOSPITAL", "PHARMACY", "UNIVERSITY", "INSTITUTE", "LLP", "CORP"]):
+        if any(k in cell_str.upper() for k in ["COLLEGE", "HOSPITAL", "PHARMACY", "UNIVERSITY", "INSTITUTE", "LLP", "CORP", "ACME", "CLIENT"]):
             lines = [l.strip() for l in cell_str.split("\n") if l.strip()]
             if lines:
-                if not quotation_dict["customer_name"]:
-                    quotation_dict["customer_name"] = lines[0]
+                if not q_dict["customer_name"]:
+                    c_cand = re.sub(r"(?i)^(?:Buyer|Bill To|Customer|Client|To)\s*[\:\s]*", "", lines[0]).strip()
+                    q_dict["customer_name"] = c_cand
                     if len(lines) > 1:
-                        quotation_dict["customer_address"] = ", ".join(lines[1:])
+                        q_dict["customer_address"] = ", ".join(lines[1:])
 
     # ── Step 2: Multi-Tier Header Table Detection ──────────────────────────────
     header_start_idx = -1
     for r_idx, row in enumerate(raw_rows):
         row_str = " ".join([str(c or "").lower() for c in row if c is not None])
-        if any(k in row_str for k in ["sl #", "sl.no", "sl no", "s.no", "sno", "item no", "line no"]):
+        if any(k in row_str for k in ["sl #", "sl.no", "sl no", "s.no", "sno", "item no", "line no", "sr no", "item #"]):
             header_start_idx = r_idx
             break
-        if any(d in row_str for d in ["item description", "particulars"]) and any(q in row_str for q in ["qty", "quantity", "rate", "price", "amount"]):
+        if any(d in row_str for d in ["item description", "particulars", "description"]) and any(q in row_str for q in ["qty", "quantity", "rate", "price", "amount", "total"]):
             header_start_idx = r_idx
             break
 
     if header_start_idx == -1:
-        header_start_idx = 0
+        # Fallback: scan for any row containing at least 2 recognizable column headers
+        for r_idx, row in enumerate(raw_rows):
+            matched_count = sum(1 for c in row if match_cell_to_field(c) is not None)
+            if matched_count >= 2:
+                header_start_idx = r_idx
+                break
 
+    if header_start_idx == -1:
+        header_start_idx = 0
 
     combined_headers: Dict[int, List[str]] = {}
     last_header_idx = header_start_idx
 
-    for r_idx in range(header_start_idx, min(header_start_idx + 4, len(raw_rows))):
+    # Stack main header row
+    for c_idx, val in enumerate(raw_rows[header_start_idx]):
+        if val is not None and str(val).strip():
+            combined_headers[c_idx] = [str(val).strip().replace("\n", " ")]
+
+    # Only stack additional rows if they are genuine sub-header rows (e.g. chemical/industrial tables)
+    for r_idx in range(header_start_idx + 1, min(header_start_idx + 4, len(raw_rows))):
         row = raw_rows[r_idx]
-        if row and row[0] is not None and str(row[0]).strip().isdigit() and int(str(row[0]).strip()) == 1:
+        if not is_sub_header_row(row):
             break
         last_header_idx = r_idx
         for c_idx in range(len(row)):
@@ -308,33 +366,12 @@ def extract_excel_quotation(file_path: Path) -> List[Tuple[Dict[str, Any], List[
                         combined_headers[c_idx] = []
                     combined_headers[c_idx].append(c_str)
 
+
     col_map: Dict[int, str] = {}
     for c_idx, parts in combined_headers.items():
-        h_str = " ".join(parts).lower()
-        if any(k in h_str for k in ["sl #", "s.no", "sno", "sl no", "line"]):
-            col_map[c_idx] = "line_no"
-        elif any(k in h_str for k in ["item description", "description", "particulars", "product", "details"]):
-            col_map[c_idx] = "description"
-        elif "brand" in h_str:
-            col_map[c_idx] = "brand"
-        elif any(k in h_str for k in ["uom", "unit"]):
-            col_map[c_idx] = "uom"
-        elif any(k in h_str for k in ["selling price", "unit price", "net price", "rate"]):
-            col_map[c_idx] = "rate"
-        elif any(k in h_str for k in ["sub total", "gross", "gross amount"]):
-            col_map[c_idx] = "gross_amount"
-        elif any(k in h_str for k in ["discount %", "disc %", "disc%"]):
-            col_map[c_idx] = "discount_pct"
-        elif any(k in h_str for k in ["discount amount", "disc amt"]) or (h_str == "amount" and c_idx == 8):
-            col_map[c_idx] = "discount_amount"
-        elif any(k in h_str for k in ["after discount", "taxable", "taxable amount"]):
-            col_map[c_idx] = "taxable_amount"
-        elif any(k in h_str for k in ["gst %", "tax %", "vat %"]):
-            col_map[c_idx] = "gst_pct"
-        elif any(k in h_str for k in ["amount (rs.) b", "gst amount", "tax amount", "vat amount"]):
-            col_map[c_idx] = "gst_amount"
-        elif any(k in h_str for k in ["amount (rs.) a+b", "final", "total", "net value", "grand total"]):
-            col_map[c_idx] = "final_value"
+        field = match_cell_to_field(" ".join(parts))
+        if field and field not in col_map.values():
+            col_map[c_idx] = field
 
     # Auto-detect Quantity column if unmapped
     if "qty" not in col_map.values():
@@ -355,14 +392,7 @@ def extract_excel_quotation(file_path: Path) -> List[Tuple[Dict[str, Any], List[
             continue
 
         row_str = " ".join([str(c) for c in row if c is not None])
-        if "grand total" in row_str.lower() or "total amount" in row_str.lower():
-            continue
-
-        s_no = row[0]
-        desc = row[1] if len(row) > 1 else None
-        if s_no is None and (desc is None or str(desc).strip() == ""):
-            continue
-        if str(s_no).strip().lower() in ["lab", "sl #", "s.no", "total", ""]:
+        if any(k in row_str.lower() for k in ["grand total", "total amount", "total in words", "authorised signatory", "authorized signatory", "terms and conditions"]):
             continue
 
         item_dict: Dict[str, Any] = {}
@@ -370,16 +400,25 @@ def extract_excel_quotation(file_path: Path) -> List[Tuple[Dict[str, Any], List[
             if c_idx < len(row):
                 item_dict[field] = row[c_idx]
 
+        desc = item_dict.get("description")
+        s_no = item_dict.get("line_no")
+        if not desc and not s_no:
+            non_empty_texts = [str(c).strip() for c in row if c is not None and str(c).strip() and not str(c).strip().replace(".", "").isdigit()]
+            if non_empty_texts:
+                desc = non_empty_texts[0]
+            else:
+                continue
+
         l_no = auto_line_no
-        if item_dict.get("line_no") is not None:
+        if s_no is not None:
             try:
-                l_no = int(str(item_dict["line_no"]).replace("#", "").replace(".", "").strip())
+                l_no = int(str(s_no).replace("#", "").replace(".", "").strip())
             except ValueError:
                 l_no = auto_line_no
 
         auto_line_no = l_no + 1
 
-        desc_str = str(item_dict.get("description") or "").strip()
+        desc_str = str(desc or "").strip()
         brand_str = str(item_dict.get("brand") or "").strip()
         uom_str = str(item_dict.get("uom") or "Nos").strip()
 
@@ -413,15 +452,17 @@ def extract_excel_quotation(file_path: Path) -> List[Tuple[Dict[str, Any], List[
         final_val = to_decimal(item_dict.get("final_value"))
         if final_val == Decimal("0.00") and taxable > Decimal("0.00"):
             final_val = taxable + gst_amt
+        if final_val == Decimal("0.00") and gross > Decimal("0.00"):
+            final_val = gross
 
         item = {
             "line_no": l_no,
-            "item_code": f"ITEM-{l_no}",
+            "item_code": str(item_dict.get("item_code") or f"ITEM-{l_no}"),
             "description": desc_str,
-            "hsn_code": "",
+            "hsn_code": str(item_dict.get("hsn_code") or ""),
             "brand": brand_str,
             "uom": uom_str or "Nos",
-            "packing": "",
+            "packing": str(item_dict.get("packing") or ""),
             "qty": qty,
             "rate": rate,
             "gross_amount": gross,
@@ -437,29 +478,61 @@ def extract_excel_quotation(file_path: Path) -> List[Tuple[Dict[str, Any], List[
         }
         line_items.append(validate_row_arithmetic(item))
 
+    if not line_items:
+        return None
+
     # Calculate grand total from line items if not extracted
-    if quotation_dict["grand_total_final"] == Decimal("0.00") and line_items:
-        quotation_dict["grand_total_final"] = sum(to_decimal(i.get("final_value") or 0) for i in line_items)
-        quotation_dict["grand_total_taxable"] = sum(to_decimal(i.get("taxable_amount") or 0) for i in line_items)
-        quotation_dict["grand_total_cgst"] = sum(to_decimal(i.get("cgst_amount") or 0) for i in line_items)
-        quotation_dict["grand_total_sgst"] = sum(to_decimal(i.get("sgst_amount") or 0) for i in line_items)
+    if q_dict["grand_total_final"] == Decimal("0.00") and line_items:
+        q_dict["grand_total_final"] = sum(to_decimal(i.get("final_value") or 0) for i in line_items)
+        q_dict["grand_total_taxable"] = sum(to_decimal(i.get("taxable_amount") or 0) for i in line_items)
+        q_dict["grand_total_cgst"] = sum(to_decimal(i.get("cgst_amount") or 0) for i in line_items)
+        q_dict["grand_total_sgst"] = sum(to_decimal(i.get("sgst_amount") or 0) for i in line_items)
 
     # Classify document
     text_sample = " ".join([str(cell) for row in raw_rows[:10] for cell in row if cell is not None])
     from app.quotation_extraction.classifier import classify_document_text
     doc_type, confidence, reasoning = classify_document_text(text_sample)
 
-    quotation_dict.update({
+    q_dict.update({
         "document_type": doc_type,
-        "document_no": quotation_dict.get("quotation_no"),
-        "document_date": quotation_dict.get("quotation_date"),
+        "document_no": q_dict.get("quotation_no"),
+        "document_date": q_dict.get("quotation_date"),
         "classification_confidence": confidence,
         "classification_reasoning": reasoning,
         "extraction_status": "ok" if line_items else "needs_review"
     })
 
     # Validate totals
-    quotation_dict = validate_quotation_totals(quotation_dict, line_items)
+    q_dict = validate_quotation_totals(q_dict, line_items)
 
-    return [(quotation_dict, line_items)]
+    return (q_dict, line_items)
+
+
+def extract_excel_quotation(file_path: Path) -> List[Tuple[Dict[str, Any], List[Dict[str, Any]]]]:
+    """Extract quotation metadata and line items from all sheets in an Excel / CSV file."""
+    ext = file_path.suffix.lower()
+    all_results: List[Tuple[Dict[str, Any], List[Dict[str, Any]]]] = []
+
+    if ext == ".csv":
+        raw_rows = read_csv_file(file_path)
+        res = extract_single_sheet_rows(raw_rows, file_path.name)
+        if res:
+            all_results.append(res)
+    elif ext == ".xls":
+        sheets = read_xls_file_all_sheets(file_path)
+        for sheet_name, rows in sheets:
+            res = extract_single_sheet_rows(rows, file_path.name, sheet_name)
+            if res:
+                all_results.append(res)
+    elif ext in (".xlsx", ".xlsm"):
+        sheets = read_xlsx_file_all_sheets(file_path)
+        for sheet_name, rows in sheets:
+            res = extract_single_sheet_rows(rows, file_path.name, sheet_name)
+            if res:
+                all_results.append(res)
+    else:
+        raise QuotationParsingError(f"Unsupported spreadsheet format: {ext}")
+
+    logger.info(f"Extracted {len(all_results)} quotation sheet(s) from '{file_path.name}'.")
+    return all_results
 
