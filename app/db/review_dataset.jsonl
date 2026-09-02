@@ -18,3 +18,5 @@
 {"timestamp":"2026-08-28T06:49:14.907Z","line_item_id":"4140","document_id":864,"field":"final_value","original_value":"1840.00","corrected_value":"1040.00","document_crop":null}
 {"timestamp":"2026-08-28T06:49:26.159Z","line_item_id":"4140","document_id":864,"field":"rate","original_value":"92.00","corrected_value":"52.00","document_crop":null}
 {"timestamp":"2026-08-28T06:49:29.529Z","line_item_id":"4140","document_id":864,"field":"gross_amount","original_value":"1840.00","corrected_value":"1040.00","document_crop":null}
+{"timestamp":"2026-09-02T05:30:17.517Z","line_item_id":"4285","document_id":899,"field":"gross_amount","original_value":"794529.00","corrected_value":"7945.20","document_crop":null}
+{"timestamp":"2026-09-02T05:30:24.680Z","line_item_id":"4285","document_id":899,"field":"taxable_amount","original_value":"794529.00","corrected_value":"79452.20","document_crop":null}
