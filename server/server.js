@@ -1074,9 +1074,78 @@ if (fs.existsSync(frontendDistPath)) {
   });
 }
 
-// Start Server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Express API server running on http://0.0.0.0:${PORT}`);
+// Start Server with Initial Extracts Diagnostic Banner
+app.listen(PORT, '0.0.0.0', async () => {
+  console.log(`\n========================================================================`);
+  console.log(`🚀 NissiGrid Document Intelligence Platform | Port ${PORT}`);
+  console.log(`📡 URL: http://0.0.0.0:${PORT} (Local: http://localhost:${PORT})`);
+  console.log(`========================================================================\n`);
+
+  try {
+    const statsRes = await pool.query(`
+      SELECT 
+        COUNT(*) as total_docs,
+        COALESCE(SUM(grand_total_final), 0) as total_val
+      FROM billing_documents;
+    `);
+    const lineItemRes = await pool.query(`SELECT COUNT(*) as total_items FROM billing_document_line_items;`);
+    const vendorRes = await pool.query(`SELECT COUNT(*) as total_vendors FROM billing_vendors;`);
+    const byTypeRes = await pool.query(`
+      SELECT COALESCE(document_type, 'invoice') as doc_type, COUNT(*) as cnt
+      FROM billing_documents
+      GROUP BY document_type
+      ORDER BY cnt DESC;
+    `);
+    const recentRes = await pool.query(`
+      SELECT 
+        d.id, 
+        COALESCE(d.document_no, 'N/A') as doc_no, 
+        COALESCE(d.document_type, 'invoice') as doc_type, 
+        COALESCE(v.name, 'N/A') as vendor, 
+        COALESCE(d.document_date::text, 'N/A') as doc_date, 
+        d.grand_total_final, 
+        COUNT(li.id) as item_count
+      FROM billing_documents d
+      LEFT JOIN billing_vendors v ON d.vendor_id = v.id
+      LEFT JOIN billing_document_line_items li ON d.id = li.document_id
+      GROUP BY d.id, d.document_no, d.document_type, v.name, d.document_date, d.grand_total_final
+      ORDER BY d.id DESC
+      LIMIT 10;
+    `);
+
+    const totalDocs = parseInt(statsRes.rows[0].total_docs, 10);
+    const totalVal = parseFloat(statsRes.rows[0].total_val);
+    const totalItems = parseInt(lineItemRes.rows[0].total_items, 10);
+    const totalVendors = parseInt(vendorRes.rows[0].total_vendors, 10);
+
+    console.log(`📊 INGESTION & EXTRACTION REPOSITORY SUMMARY:`);
+    console.log(`   • Total Archived Documents : ${totalDocs}`);
+    console.log(`   • Total Line Items Extracted: ${totalItems}`);
+    console.log(`   • Total Learned Vendors     : ${totalVendors}`);
+    console.log(`   • Total Extracted Value     : ₹${totalVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+    console.log(`\n📂 BREAKDOWN BY DOCUMENT CATEGORY:`);
+    byTypeRes.rows.forEach(r => {
+      console.log(`   • ${(r.doc_type || 'invoice').padEnd(25)}: ${r.cnt} documents`);
+    });
+
+    console.log(`\n📑 RECENT DOCUMENT EXTRACTS (Top 10):`);
+    console.log(`   ID    | Document No          | Type                 | Vendor                       | Date         | Total Amt      | Items`);
+    console.log(`   -------------------------------------------------------------------------------------------------------------------`);
+    recentRes.rows.forEach(r => {
+      const id = String(r.id).padEnd(5);
+      const docNo = String(r.doc_no).slice(0, 20).padEnd(20);
+      const dtype = String(r.doc_type).slice(0, 20).padEnd(20);
+      const vendor = String(r.vendor).slice(0, 28).padEnd(28);
+      const dt = String(r.doc_date).slice(0, 12).padEnd(12);
+      const tot = (r.grand_total_final !== null ? `₹${parseFloat(r.grand_total_final).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '₹0.00').padEnd(14);
+      const items = String(r.item_count).padEnd(5);
+      console.log(`   ${id} | ${docNo} | ${dtype} | ${vendor} | ${dt} | ${tot} | ${items}`);
+    });
+    console.log(`   -------------------------------------------------------------------------------------------------------------------\n`);
+  } catch (err) {
+    console.error('Error printing startup extracts summary:', err.message);
+  }
 });
+
 
 
